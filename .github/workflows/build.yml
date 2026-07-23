@@ -23,17 +23,21 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libglm-dev
 
+    - name: Prepare cppdeps directory with glm
+      run: |
+        mkdir -p /home/runner/cppdeps/include
+        # Copiem toate fișierele glm în directorul căutat de CMake
+        cp -r /usr/include/glm /home/runner/cppdeps/include/
+        # Verificăm
+        ls -la /home/runner/cppdeps/include/glm
+
     - name: Install CMake 3.25.1
       run: |
         wget -qO- "https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1-linux-x86_64.tar.gz" | sudo tar --strip-components=1 -xz -C /usr/local
         cmake --version
-        # Adaugă CMake în PATH pentru siguranță
         echo "/usr/local/bin" >> $GITHUB_PATH
 
     - name: Build with Gradle
-      env:
-        CMAKE_PREFIX_PATH: /usr
-        CPATH: /usr/include
       run: |
         chmod +x gradlew
         ./gradlew assembleDebug
