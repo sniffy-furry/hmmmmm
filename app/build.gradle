@@ -21,7 +21,8 @@ android {
                           "-DNFSMW_BUILD_TESTS=OFF",
                           "-DNFSMW_BUILD_ANDROID_JNI=ON",
                           "-DCMAKE_TOOLCHAIN_FILE=" + System.getenv("VCPKG_ROOT") + "/scripts/buildsystems/vcpkg.cmake",
-                          "-DVCPKG_TARGET_TRIPLET=arm64-android"
+                          "-DVCPKG_TARGET_TRIPLET=arm64-android",
+                          "-DANDROID_NDK=" + System.getenv("ANDROID_NDK")
             }
         }
 

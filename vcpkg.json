@@ -26,5 +26,6 @@
       "features": ["avcodec", "avformat", "swscale", "swresample"],
       "platform": "!android"
     }
-  ]
+  ],
+  "builtin-baseline": "2e7f4dc82b4f6dbdeb5d6bb9afdb45c62af77389"
 }
