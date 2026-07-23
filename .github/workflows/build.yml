@@ -23,7 +23,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libglm-dev
 
-    - name: Create FindGLM.cmake
+    - name: Prepare cppdeps directory and FindGLM.cmake
       run: |
         mkdir -p /home/runner/cppdeps/cmake/Modules
         cat > /home/runner/cppdeps/cmake/Modules/FindGLM.cmake <<EOF
@@ -35,6 +35,8 @@ jobs:
             set(GLM_INCLUDE_DIRS \${GLM_INCLUDE_DIR})
         endif()
         EOF
+        # Verifică dacă fișierul a fost creat
+        ls -la /home/runner/cppdeps/cmake/Modules/
 
     - name: Install CMake 3.25.1
       run: |
