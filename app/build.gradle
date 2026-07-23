@@ -18,14 +18,13 @@ android {
             cmake {
                 // Argumentele existente:
                 arguments "-DNFSMW_BUILD_GUI=OFF",
-                          "-DNFSMW_BUILD_CLI=OFF",
-                          "-DNFSMW_BUILD_TESTS=OFF",
-                          "-DNFSMW_BUILD_ANDROID_JNI=ON",
-                          "-DCMAKE_PREFIX_PATH=" + (System.getenv("HOME") ?: "/data/data/com.termux/files/home") + "/cppdeps",
-                          "-DCMAKE_MODULE_PATH=/home/runner/cppdeps/cmake/Modules",
-                          // 🔥 NOUL ARGUMENT (adaugă această linie):
-                          "-DNFSMW_BUILD_ANDROID_JNI=ON",
-                          "-Dspdlog_INCLUDE_DIR=/usr/include"
+                                     "-DNFSMW_BUILD_CLI=OFF",
+                                     "-DNFSMW_BUILD_TESTS=OFF",
+                                     "-DNFSMW_BUILD_ANDROID_JNI=ON",
+                                     "-DCMAKE_PREFIX_PATH=" + (System.getenv("HOME") ?: "/data/data/com.termux/files/home") + "/cppdeps",
+                                     "-DCMAKE_MODULE_PATH=/home/runner/cppdeps/cmake/Modules",
+                                     "-DGLM_INCLUDE_DIR=/usr/include",    // ← trebuie să fie
+                                     "-Dspdlog_INCLUDE_DIR=/usr/include"  // ← și aceasta
             }
         }
 
