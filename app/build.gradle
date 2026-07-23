@@ -16,21 +16,18 @@ android {
 
         externalNativeBuild {
             cmake {
-                // Lean path: just nfsmw_core + a JNI bridge behind a plain
-                // Kotlin UI. No VanGUI/GLFW/FFmpeg, no C++23 - nfsmw_core is
-                // C++20 (see CMakeLists.txt), so no extra cppFlags needed.
+                // Argumentele existente:
                 arguments "-DNFSMW_BUILD_GUI=OFF",
                           "-DNFSMW_BUILD_CLI=OFF",
                           "-DNFSMW_BUILD_TESTS=OFF",
                           "-DNFSMW_BUILD_ANDROID_JNI=ON",
-                          "-DCMAKE_PREFIX_PATH=" + (System.getenv("HOME") ?: "/data/data/com.termux/files/home") + "/cppdeps"
+                          "-DCMAKE_PREFIX_PATH=" + (System.getenv("HOME") ?: "/data/data/com.termux/files/home") + "/cppdeps",
+                          // 🔥 NOUL ARGUMENT (adaugă această linie):
+                          "-DCMAKE_MODULE_PATH=/home/runner/cppdeps/cmake/Modules"
             }
         }
 
         ndk {
-            // arm64-v8a only for the first on-device build attempt:
-            // real phones are arm64, and dropping x86_64 halves compile time/failure surface.
-            // add "x86_64" back to this list later if you ever need an emulator build.
             abiFilters "arm64-v8a"
         }
     }
