@@ -18,14 +18,16 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Install dependencies (glm, etc.)
+    - name: Install dependencies (glm, spdlog, etc.)
       run: |
         sudo apt-get update
-        sudo apt-get install -y libglm-dev
+        sudo apt-get install -y libglm-dev libspdlog-dev
 
-    - name: Prepare cppdeps directory and FindGLM.cmake
+    - name: Prepare cppdeps directory and Find modules
       run: |
         mkdir -p /home/runner/cppdeps/cmake/Modules
+
+        # FindGLM.cmake
         cat > /home/runner/cppdeps/cmake/Modules/FindGLM.cmake <<EOF
         find_path(GLM_INCLUDE_DIR NAMES glm/glm.hpp PATHS /usr/include /usr/local/include)
         mark_as_advanced(GLM_INCLUDE_DIR)
@@ -35,7 +37,19 @@ jobs:
             set(GLM_INCLUDE_DIRS \${GLM_INCLUDE_DIR})
         endif()
         EOF
-        # Verifică dacă fișierul a fost creat
+
+        # Findspdlog.cmake
+        cat > /home/runner/cppdeps/cmake/Modules/Findspdlog.cmake <<EOF
+        find_path(spdlog_INCLUDE_DIR NAMES spdlog/spdlog.h PATHS /usr/include /usr/local/include)
+        mark_as_advanced(spdlog_INCLUDE_DIR)
+        include(FindPackageHandleStandardArgs)
+        find_package_handle_standard_args(spdlog DEFAULT_MSG spdlog_INCLUDE_DIR)
+        if(spdlog_FOUND)
+            set(spdlog_INCLUDE_DIRS \${spdlog_INCLUDE_DIR})
+        endif()
+        EOF
+
+        # Verifică
         ls -la /home/runner/cppdeps/cmake/Modules/
 
     - name: Install CMake 3.25.1

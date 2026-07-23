@@ -24,7 +24,8 @@ android {
                           "-DCMAKE_PREFIX_PATH=" + (System.getenv("HOME") ?: "/data/data/com.termux/files/home") + "/cppdeps",
                           "-DCMAKE_MODULE_PATH=/home/runner/cppdeps/cmake/Modules",
                           // 🔥 NOUL ARGUMENT (adaugă această linie):
-                          "-DGLM_INCLUDE_DIR=/usr/include"
+                          "-DNFSMW_BUILD_ANDROID_JNI=ON",
+                          "-Dspdlog_INCLUDE_DIR=/usr/include"
             }
         }
 
