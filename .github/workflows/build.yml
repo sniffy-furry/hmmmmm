@@ -18,42 +18,31 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Install dependencies (glm, spdlog)
+    - name: Setup Android SDK and NDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: |
+          platform-tools
+          platforms;android-26
+          build-tools;33.0.2
+          ndk;26.1.10909125
+
+    - name: Cache vcpkg
+      uses: actions/cache@v3
+      with:
+        path: /home/runner/work/vcpkg
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-
+
+    - name: Install vcpkg and dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libglm-dev libspdlog-dev
-
-    - name: Create CMake module files
-      run: |
-        mkdir -p /home/runner/cppdeps/cmake/Modules
-
-        # FindGLM.cmake
-        cat > /home/runner/cppdeps/cmake/Modules/FindGLM.cmake <<'EOF'
-        find_path(GLM_INCLUDE_DIR NAMES glm/glm.hpp PATHS /usr/include /usr/local/include)
-        mark_as_advanced(GLM_INCLUDE_DIR)
-        include(FindPackageHandleStandardArgs)
-        find_package_handle_standard_args(GLM DEFAULT_MSG GLM_INCLUDE_DIR)
-        if(GLM_FOUND AND NOT TARGET glm::glm)
-            add_library(glm::glm INTERFACE IMPORTED)
-            set_target_properties(glm::glm PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${GLM_INCLUDE_DIR}")
-        endif()
-        EOF
-
-        # Findspdlog.cmake
-        cat > /home/runner/cppdeps/cmake/Modules/Findspdlog.cmake <<'EOF'
-        find_path(spdlog_INCLUDE_DIR NAMES spdlog/spdlog.h PATHS /usr/include /usr/local/include)
-        find_library(spdlog_LIBRARY NAMES spdlog PATHS /usr/lib /usr/lib/x86_64-linux-gnu)
-        mark_as_advanced(spdlog_INCLUDE_DIR spdlog_LIBRARY)
-        include(FindPackageHandleStandardArgs)
-        find_package_handle_standard_args(spdlog DEFAULT_MSG spdlog_INCLUDE_DIR spdlog_LIBRARY)
-        if(spdlog_FOUND AND NOT TARGET spdlog::spdlog)
-            add_library(spdlog::spdlog UNKNOWN IMPORTED)
-            set_target_properties(spdlog::spdlog PROPERTIES
-                INTERFACE_INCLUDE_DIRECTORIES "${spdlog_INCLUDE_DIR}"
-                IMPORTED_LOCATION "${spdlog_LIBRARY}"
-            )
-        endif()
-        EOF
+        git clone https://github.com/Microsoft/vcpkg.git
+        cd vcpkg
+        ./bootstrap-vcpkg.sh
+        echo "VCPKG_ROOT=$PWD" >> $GITHUB_ENV
+        echo "$PWD" >> $GITHUB_PATH
+        ./vcpkg install glm spdlog --triplet arm64-android
 
     - name: Install CMake 3.25.1
       run: |
