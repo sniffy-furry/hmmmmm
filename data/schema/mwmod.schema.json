@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mwtools/mwmod.schema.json",
+  "title": "MWTools mod manifest (.mwmod)",
+  "description": "Declarative, conflict-aware mod package (roadmap D1). A .mwmod is a zip with this manifest.json + an assets/ dir. Edits use stable LOCATORS (hashes/keys), never raw offsets where avoidable, so a mod survives minor file differences and can be applied/reverted safely via the backup layer. Packages carry the author's assets + the recipe ONLY — never copyrighted game data.",
+  "type": "object",
+  "required": ["mwmod", "name", "targetVersion", "edits"],
+  "properties": {
+    "mwmod":         { "const": 1, "description": "manifest format version" },
+    "name":          { "type": "string" },
+    "author":        { "type": "string" },
+    "description":   { "type": "string" },
+    "targetVersion": { "type": "string", "examples": ["NFSMW PC retail v1.3"] },
+    "edits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action", "file"],
+        "properties": {
+          "action": {
+            "enum": ["replace-texture", "replace-mesh", "set-vault-field", "replace-audio", "replace-minimap-tile", "raw-patch"]
+          },
+          "file":   { "type": "string", "description": "game-relative path of the target file" },
+          "locator": {
+            "type": "object",
+            "description": "how to find the edit point — prefer stable identifiers over offsets",
+            "properties": {
+              "textureName": { "type": "string" },
+              "textureHash": { "type": "string", "pattern": "^0x[0-9A-Fa-f]{8}$" },
+              "objectHash":  { "type": "string", "pattern": "^0x[0-9A-Fa-f]{8}$" },
+              "vaultKey":    { "type": "string", "pattern": "^0x[0-9A-Fa-f]{8}$" },
+              "tileIndex":   { "type": "integer", "minimum": 0 },
+              "offset":      { "type": "integer", "minimum": 0, "description": "raw-patch only; requires expectOriginal" },
+              "expectOriginal": { "type": "string", "description": "hex of the bytes that MUST currently be present (safety gate)" }
+            }
+          },
+          "asset":  { "type": "string", "description": "path within the package assets/ dir" },
+          "value":  { "description": "for set-vault-field: typed value to write" },
+          "bytes":  { "type": "string", "description": "for raw-patch: hex replacement bytes (must equal expectOriginal length)" }
+        }
+      }
+    }
+  }
+}

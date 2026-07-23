@@ -1,0 +1,39 @@
+{
+  "source": "speed.exe",
+  "imagebase": "0x400000",
+  "class_name_table": {
+    "file_offset": "0x4ADD1C",
+    "va_base": "0x8ADD1C",
+    "names": [
+      "pvehicle",
+      "chopperspecs",
+      "damagespecs",
+      "rigidbodyspecs",
+      "RBVehicle",
+      "RBTrailer",
+      "RBCop",
+      "EffectsVehicle",
+      "EffectsCar",
+      "EffectsFragment",
+      "DamageRacer",
+      "DamageHeli",
+      "DamageCopCar",
+      "SuspensionTraffic",
+      "SuspensionTrailer",
+      "EngineRacer",
+      "SimpleChopper",
+      "EngineTraffic",
+      "DrawHeli",
+      "DrawTraffic",
+      "DrawNISCar",
+      "DrawCopCar",
+      "DrawRaceCar",
+      "SoundTraffic",
+      "SoundCop",
+      "SoundRacer",
+      "SoundHeli",
+      "SpikeStrip"
+    ]
+  },
+  "note": "EA::Reflection class names; registration is code-driven (string xrefs land in .text, e.g. EngineRacer@0x4886F1, AICopManager constructors @0x3CAEA..). Field name->offset->type maps are built at runtime by these constructors, NOT in a static data table. NtaD record keys are NOT inline Joaat/Bin hashes of ErtS strings (tested: <0.2% match at every aligned offset)."
+}

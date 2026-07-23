@@ -1,0 +1,357 @@
+
+Graphics Engine Bible 2026
+Volume II Supplement
+
+NFS Most Wanted (2005), DX9 Injector Engineering,
+and Legacy Renderer Modernization Roadmap
+
+=====================================================================
+Introduction
+=====================================================================
+
+This supplement defines the advanced DX9-focused direction for future
+Graphics Engine Bible chapters.
+
+Primary Focus Areas:
+
+- DirectX 9 renderer architecture
+- Injector engineering
+- Shader replacement systems
+- ENB-style rendering frameworks
+- Deferred rendering in SM3.0
+- NFS Most Wanted (2005) analysis
+- Drift City modernization
+- GTA San Andreas modernization
+- Prism3D modernization
+
+=====================================================================
+Chapter Roadmap
+=====================================================================
+
+Part I
+DX9 Graphics Engineering
+
+Part II
+DX9 Injector Architecture
+
+Part III
+Shader Replacement Systems
+
+Part IV
+Legacy Engine Modernization
+
+Part V
+Need for Speed Most Wanted Renderer Analysis
+
+=====================================================================
+1. Full IDirect3DDevice9 Hook Architecture
+=====================================================================
+
+Topics:
+
+- VTable discovery
+- Device acquisition
+- Present hooks
+- EndScene hooks
+- Reset hooks
+- Lost device handling
+- Resource recreation
+
+Example Hook Targets
+
+IDirect3DDevice9::Present
+IDirect3DDevice9::EndScene
+IDirect3DDevice9::Reset
+IDirect3DDevice9::SetPixelShader
+IDirect3DDevice9::SetVertexShader
+
+Engineering Coverage
+
+- State interception
+- Draw-call inspection
+- Shader tracking
+- Render target capture
+- Depth buffer acquisition
+
+=====================================================================
+2. State Block Capture and Restoration
+=====================================================================
+
+One of the most important injector systems.
+
+Goals
+
+- Preserve game state
+- Prevent rendering corruption
+- Support compatibility
+
+Workflow
+
+Capture State
+↓
+Execute Effects
+↓
+Restore State
+
+Topics
+
+- IDirect3DStateBlock9
+- Texture state preservation
+- Sampler state restoration
+- Shader restoration
+- Render target restoration
+
+=====================================================================
+3. Shader Replacement Frameworks
+=====================================================================
+
+Core Components
+
+Shader Discovery
+↓
+Hash Generation
+↓
+Database Lookup
+↓
+Replacement Selection
+↓
+Runtime Compilation
+
+Coverage
+
+- Vertex shaders
+- Pixel shaders
+- Material identification
+- Runtime shader swapping
+
+Applications
+
+- HD lighting
+- Better materials
+- PBR conversion
+- Water upgrades
+- Vehicle shaders
+
+=====================================================================
+4. ENB/ReShade-Style Effect Chains
+=====================================================================
+
+Effect Stack
+
+HDR
+↓
+Bloom
+↓
+SSAO
+↓
+SSR
+↓
+Volumetric Fog
+↓
+Color Grading
+↓
+Sharpening
+↓
+Present
+
+Future Chapters Include
+
+- Resource management
+- Effect scheduling
+- Buffer sharing
+- Performance optimization
+
+=====================================================================
+5. Deferred Lighting in DirectX 9 SM3.0
+=====================================================================
+
+Topics
+
+- MRT limitations
+- G-buffer packing
+- Light accumulation
+- Stencil volumes
+- HDR integration
+
+Recommended Pipeline
+
+Depth
+↓
+GBuffer
+↓
+Light Accumulation
+↓
+HDR
+↓
+Post Processing
+
+Coverage
+
+- Memory budgets
+- Render target formats
+- Bandwidth optimization
+
+=====================================================================
+6. Prism3D Modernization
+=====================================================================
+
+Target Games
+
+ETS2
+ATS
+Legacy Prism3D titles
+
+Topics
+
+- Road materials
+- Weather systems
+- Reflection systems
+- Lighting upgrades
+- HDR conversion
+
+Potential Upgrades
+
+- GTAO
+- SSR
+- Volumetric fog
+- Improved shadows
+
+=====================================================================
+7. Drift City Renderer Analysis
+=====================================================================
+
+Topics
+
+- Scene rendering order
+- Vehicle rendering
+- Material systems
+- Environment shaders
+- UI integration
+
+Modernization Topics
+
+- HDR pipeline
+- Better reflections
+- AO integration
+- Modern weather rendering
+- Improved vehicle paint
+
+=====================================================================
+8. GTA San Andreas Modernization
+=====================================================================
+
+Topics
+
+- RenderWare architecture
+- World rendering
+- Vehicle rendering
+- Shadow systems
+- Streaming architecture
+
+Modernization Topics
+
+- Deferred lighting
+- HDR rendering
+- Volumetric lighting
+- SSR
+- PBR-style materials
+
+=====================================================================
+9. Need for Speed Most Wanted (2005)
+=====================================================================
+
+Major Focus Area
+
+Renderer Characteristics
+
+- DirectX 9
+- Heavy post processing
+- Motion blur systems
+- Reflection rendering
+- Streaming world architecture
+
+Future Analysis Topics
+
+World Renderer
+Vehicle Renderer
+Shadow Renderer
+Reflection Systems
+Speed Effects
+Motion Blur
+Depth of Field
+Road Shading
+Weather Effects
+
+=====================================================================
+10. NFS MW Modernization Roadmap
+=====================================================================
+
+Phase 1
+
+HDR Conversion
+
+Phase 2
+
+Bloom Modernization
+
+Phase 3
+
+Improved Reflections
+
+Phase 4
+
+Ambient Occlusion
+
+Phase 5
+
+SSR
+
+Phase 6
+
+Volumetrics
+
+Phase 7
+
+PBR Conversion
+
+Phase 8
+
+Temporal Effects
+
+=====================================================================
+11. HLSL Library Development
+=====================================================================
+
+Future Chapters Will Include
+
+Lighting Functions
+Shadow Functions
+Normal Encoding
+SSR
+SSAO
+Bloom
+Tone Mapping
+Color Grading
+Fog
+Volumetrics
+
+Goal
+
+Create a reusable DX9 SM3.0 shader library suitable for:
+
+- NFS Most Wanted
+- Drift City
+- GTA SA
+- Prism3D
+- Custom DX9 engines
+
+=====================================================================
+Summary
+=====================================================================
+
+Future encyclopedia chapters will place major emphasis on DirectX 9
+engineering and modernization, with NFS Most Wanted (2005) serving as
+one of the primary case studies for renderer analysis, shader
+replacement, post-processing injection, and modern graphics upgrades.
+
+End of Supplement.

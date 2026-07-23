@@ -1,0 +1,1959 @@
+================================================================================
+  VANHOOKS + VANGUI — COMPLETE TECHNICAL SKILL REFERENCE
+  Version sourced from: VanHooks v0.1.0 / VanGUI (Dear ImGui rename)
+  C++ Standard: C++23 throughout
+================================================================================
+
+This document is a complete technical reference for VanHooks and VanGUI.
+It is written to be fully self-contained — no source files need to be uploaded
+for Claude to work with either library correctly.
+
+────────────────────────────────────────────────────────────────────────────────
+PART 1 — VANHOOKS
+────────────────────────────────────────────────────────────────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.1  WHAT VANHOOKS IS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VanHooks is a C++23 cross-platform function hooking library. It is a complete
+replacement for MinHook, EasyHook, SafetyHook, and PolyHook2 with the following
+advantages:
+
+  Platform support : Windows, Linux, macOS
+  Architecture     : x86, x64, ARM64
+  Hook types       : Trampoline, IAT, PLT/GOT, VTable, Mid-function
+  Error handling   : std::expected<T, Error> — no exceptions, no global state
+  Disassembler     : Zydis (fetched automatically via CMake FetchContent)
+  C++ standard     : C++23 (std::expected, std::span, designated initializers)
+
+Comparison table (from README):
+  MinHook    — Win only, no ARM64, IAT only, C enum errors, C89 API
+  EasyHook   — Win only, no ARM64, IAT only, C enum errors, .NET
+  SafetyHook — Win/Lin, no ARM64, no table hooks, exceptions, C++23
+  PolyHook2  — Win only, no ARM64, IAT+VTable, exceptions, C++20
+  VanHooks   — Win/Lin/macOS, ARM64, all hook types, std::expected, C++23
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.2  HEADER LAYOUT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  include/vanhooks/
+    vanhooks.hpp      — Core types, Engine API, all public structs and enums
+    memory.hpp        — Memory protection, allocation, ScopedWritable, TrampolineAllocator
+    disasm.hpp        — Disassembler interface (Zydis x64 + ARM64 manual decoder)
+    trampoline.hpp    — Patch builder, jump encoding, ThreadFence, PatchContext
+    tables.hpp        — IAT / PLT / GOT / VTable hook internals
+
+  src/
+    engine.cpp        — Central hook registry and lifecycle manager
+    disasm.cpp        — Zydis x64 backend + ARM64 fixed-width decoder
+    trampoline.cpp    — x64 + ARM64 patch builder + apply/remove
+    thread_fence.cpp  — Thread suspension (NtGetNextThread / procfs / task_threads)
+    memory_win.cpp    — VirtualAlloc, VirtualProtect, near-target probe (Windows)
+    memory_posix.cpp  — mmap, mprotect, /proc/self/maps, dl_iterate_phdr (Linux/macOS)
+    tables_win.cpp    — PE IAT walk, EAT, VTable patching (Windows)
+    tables_posix.cpp  — GOT (Linux), lazy pointers (macOS), VTable
+    obfstr.hpp        — Compile-time XOR string obfuscation (internal, not public API)
+
+The only header you #include in user code is:
+    #include <vanhooks/vanhooks.hpp>
+
+All other headers are consumed internally. You do not include memory.hpp,
+disasm.hpp, trampoline.hpp, or tables.hpp in application code.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.3  CMAKE INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Option A — FetchContent (recommended, Zydis fetched automatically):
+
+    include(FetchContent)
+    FetchContent_Declare(vanhooks
+        GIT_REPOSITORY https://github.com/your-org/vanhooks.git
+        GIT_TAG        main
+    )
+    FetchContent_MakeAvailable(vanhooks)
+    target_link_libraries(my_target PRIVATE VanHooks::vanhooks)
+
+Option B — Drop-in precompiled lib (like MinHook):
+
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(VH_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/win-x64")
+    else()
+        set(VH_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/win-x86")
+    endif()
+
+    add_library(VanHooks::vanhooks STATIC IMPORTED)
+    set_target_properties(VanHooks::vanhooks PROPERTIES
+        IMPORTED_LOCATION_RELEASE "${VH_LIB_DIR}/Release/vanhooks.lib"
+        IMPORTED_LOCATION_DEBUG   "${VH_LIB_DIR}/Debug/vanhooks.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_link_libraries(my_target PRIVATE VanHooks::vanhooks)
+
+All libs use static CRT (/MT or /MTd). No VC Redist dependency.
+CMake minimum version required: 3.25.
+Compiler requirements: MSVC 19.38+, GCC 13+, Clang 17+.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.4  ERROR TYPE SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Every VanHooks operation returns Result<T> or Status:
+
+    template<typename T>
+    using Result = std::expected<T, Error>;
+    using Status = Result<void>;
+
+Error enum (complete list from vanhooks.hpp):
+
+    // General
+    Ok = 0, NotInitialized, AlreadyInitialized, InvalidArgument,
+    Unsupported, OutOfRange, OsError,
+
+    // Memory (100–104)
+    MemoryAllocationFailed, MemoryProtectFailed, MemoryReadFailed,
+    MemoryWriteFailed, TrampolineNoSpace,
+
+    // Hook lifecycle (200–205)
+    HookNotFound, HookAlreadyExists, HookInstallFailed, HookRemoveFailed,
+    HookAlreadyEnabled, HookAlreadyDisabled,
+
+    // Disassembly (300–302)
+    DisassemblyFailed, InstructionTooShort, UnsupportedInstruction,
+
+    // Module / symbol (400–403)
+    ModuleNotFound, SymbolNotFound, IATEntryNotFound, PLTEntryNotFound,
+
+    // Thread (500–502)
+    ThreadSuspendFailed, ThreadResumeFailed, ThreadInPrologue,
+
+    // Batch / chain (600–602)
+    QueueEmpty, ChainBaseNotFound, ChainOrderViolation
+
+Convert to string:
+    std::string_view vanhooks::error_to_string(Error e) noexcept;
+
+Pattern for checking results:
+    auto r = eng.hook(&fn, &detour, &orig);
+    if (!r) {
+        printf("failed: %s\n", vanhooks::error_to_string(r.error()).data());
+        return;
+    }
+    // r.value() is the HookHandle
+
+Chaining with and_then / transform_error:
+    auto r = eng.hook(&fn, &detour, &orig)
+        .and_then([&](auto h) { return eng.enable(h); })
+        .transform_error([](vanhooks::Error e) {
+            fprintf(stderr, "VanHooks: %s\n",
+                vanhooks::error_to_string(e).data());
+            return e;
+        });
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.5  HOOKHANDLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    struct HookHandle {
+        uint64_t id = 0;
+        bool valid() const noexcept { return id != 0; }
+        explicit operator bool() const noexcept { return valid(); }
+    };
+
+Every successful hook installation returns a HookHandle. Store it to enable,
+disable, or remove the hook later. An invalid handle has id == 0.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.6  HOOKDESC — INTROSPECTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    struct HookDesc {
+        HookHandle  handle;
+        HookKind    kind;       // Trampoline / IAT / PLT / VTable / Mid
+        void*       target;     // original function address
+        void*       detour;     // replacement function address
+        void*       trampoline; // callable original (trampoline hooks only)
+        bool        enabled;
+        std::string tag;        // optional human-readable label
+    };
+
+Retrieve via:
+    std::optional<HookDesc>  eng.describe(HookHandle h) const;
+    std::vector<HookDesc>    eng.list_hooks() const;
+    size_t                   eng.hook_count() const noexcept;
+    HookHandle               eng.find_by_target(const void* target) const noexcept;
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.7  ENGINE CLASS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Engine is the central object. All hooks are registered in it.
+There is also a process-wide global engine accessed via global_engine().
+
+    class Engine {
+    public:
+        struct Config {
+            std::shared_ptr<IAllocator> allocator;         // null = default
+            size_t   trampoline_pool_size  = 65536;        // bytes per slab
+            bool     auto_flush_icache     = true;
+            bool     enable_integrity_watchdog = false;
+            uint32_t watchdog_interval_ms      = 500;
+            bool     suppress_etw              = false;    // Windows only
+            bool     suppress_amsi             = false;    // Windows only
+        };
+
+        explicit Engine(Config cfg = {});
+        ~Engine();  // calls remove_all() automatically
+        // non-copyable, movable
+    };
+
+    // Global engine (zero setup):
+    Engine& vanhooks::global_engine();
+
+Config fields in full detail:
+
+  trampoline_pool_size
+    Bytes per TrampolineAllocator slab. Default 65536. Each slab holds
+    65536 / 128 = 512 trampoline slots. Increase only if hooking hundreds
+    of functions simultaneously.
+
+  auto_flush_icache
+    Calls flush_icache() after every patch write. Should always be true
+    on ARM64. Safe to leave true on x64 (is a no-op there internally).
+
+  enable_integrity_watchdog
+    Spawns a background thread (via NtCreateThreadEx on Windows, std::thread
+    on POSIX) that wakes every watchdog_interval_ms milliseconds and
+    memcmp's each enabled trampoline hook's live bytes against the cached
+    hook_patch bytes. If they differ (removed by an external driver), it
+    reinstalls the patch. Thread is created via NtCreateThreadEx so
+    CreateThread does not appear in the IAT.
+
+  suppress_etw (Windows only, default false)
+    Patches ntdll!EtwEventWrite and ntdll!EtwEventWriteFull to execute
+    XOR EAX,EAX; RET immediately. Silences user-mode ETW providers.
+    No-op on HVCI/VBS systems where ntdll .text is hypervisor-locked.
+
+  suppress_amsi (Windows only, default false)
+    Uses VanHooks' own trampoline hook to intercept amsi.dll!AmsiScanBuffer
+    and amsi.dll!AmsiScanString, writing AMSI_RESULT_CLEAN to the result
+    out-parameter and returning S_OK. No-op if amsi.dll is not loaded.
+    Uses proper parameter ABI (not hardcoded RSP offsets).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.8  TRAMPOLINE HOOKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Trampoline hooks overwrite the first N bytes of a target function with a
+jump to the detour. A trampoline stub in separately allocated executable
+memory holds the displaced original bytes followed by a jump back, making
+the original callable through the stored function pointer.
+
+Patch strategies by architecture:
+  x86   : 5-byte rel32 JMP (always fits, all addresses within ±2GB)
+  x64   : 5-byte rel32 JMP if target within ±2GB of detour,
+           else 14-byte FF25 indirect JMP [RIP+0] with 8-byte address pool
+           (no register clobber)
+  ARM64 : 4-byte B #offset if within ±128MB,
+           else 20-byte ADRP+LDR+BR or MOVZ/MOVK×4+BR (20 bytes, anywhere)
+
+Trampoline slot size: 128 bytes (ARM64 worst case = 5 stolen insns × 20 bytes
++ 20-byte jump-back; x64 worst case = 4 insns × 15 bytes + 14-byte jump-back).
+
+Basic typed hook (enforces function signature at compile time):
+    static RetType (*orig_fn)(Args...) = nullptr;
+
+    RetType detour_fn(Args... args) {
+        // pre-call logic
+        auto result = orig_fn(args...);
+        // post-call logic
+        return result;
+    }
+
+    auto r = eng.hook(&target_fn, &detour_fn, &orig_fn);
+    // or using global engine shorthand:
+    auto r = vanhooks::hook(&target_fn, &detour_fn, &orig_fn);
+
+Untyped (void*) hook — use when you have raw addresses:
+    Result<HookHandle> eng.hook_trampoline(
+        void*             target,
+        void*             detour,
+        void**            original_out = nullptr,
+        TrampolineOptions opts         = {}
+    );
+
+TrampolineOptions struct:
+    struct TrampolineOptions {
+        bool        thread_safe = true;  // suspend threads during patch
+        std::string tag;                 // human-readable label for describe()
+    };
+
+  thread_safe = true  (default):
+    Constructs a ThreadFence that enumerates and suspends all threads via
+    NtGetNextThread (Windows), /proc/self/task (Linux), or task_threads
+    (macOS). Applies the patch. Resumes all threads. Use when you cannot
+    guarantee where other threads are executing.
+
+  thread_safe = false:
+    No thread suspension. Only safe when you know the other threads are NOT
+    executing at or near the target function — for example when calling from
+    inside a Present() hook where you know the main thread is in Present.
+
+Hook by module + symbol name (equivalent to MH_CreateHookApiEx):
+    Result<HookHandle> eng.hook_api(
+        std::string_view  module_name,    // e.g. "user32.dll" or "user32"
+        std::string_view  function_name,  // e.g. "MessageBoxW"
+        void*             detour,
+        void**            original_out = nullptr,
+        TrampolineOptions opts         = {}
+    );
+
+    // Typed variant:
+    Result<HookHandle> eng.hook_api<PFN>(
+        std::string_view module_name,
+        std::string_view function_name,
+        PFN*             detour,
+        PFN**            original_out = nullptr,
+        TrampolineOptions opts        = {}
+    );
+
+    // Resolves target via GetModuleHandleA + GetProcAddress (Windows)
+    // or dlsym(RTLD_DEFAULT, ...) (POSIX), then calls hook_trampoline().
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.9  IAT HOOKS (Windows only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IAT hooks redirect calls within a specific module's Import Address Table
+without touching the target function's bytes. Safe when the target function
+prologue is too short for a trampoline (HookInstallFailed).
+
+Patch first matching IAT slot:
+    Result<HookHandle> eng.hook_iat(
+        void*       detour,
+        IATOptions  opts
+    );
+
+Patch ALL matching IAT slots across all loaded modules:
+    Result<std::vector<HookHandle>> eng.hook_iat_all(
+        void*       detour,
+        IATOptions  opts
+    );
+
+IATOptions struct:
+    struct IATOptions {
+        std::string module_name;  // which module's IAT to search
+                                  // (empty = search all loaded modules)
+        std::string import_name;  // symbol name to redirect, e.g. "MessageBoxW"
+        std::string tag;
+    };
+
+Example:
+    static PFN_MessageBoxW orig_mbw = nullptr;
+    BOOL WINAPI hk_mbw(HWND h, LPCWSTR text, LPCWSTR cap, UINT t) {
+        return orig_mbw(h, L"[intercepted]", cap, t);
+    }
+
+    // Patch just the IAT slot in "myapp.exe"
+    auto r = eng.hook_iat(
+        (void*)&hk_mbw,
+        vanhooks::IATOptions{ .import_name = "MessageBoxW",
+                               .module_name = "myapp.exe" }
+    );
+
+    // Patch every IAT slot for malloc across all loaded modules
+    auto rs = eng.hook_iat_all(
+        (void*)&hk_malloc,
+        vanhooks::IATOptions{ .import_name = "malloc" }
+    );
+
+Internal mechanism: walks the PE IMAGE_IMPORT_DESCRIPTOR chain of the
+target module, finds slots matching import_name, calls VirtualProtect to
+PAGE_READWRITE, writes the detour pointer, restores protection.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.10  PLT/GOT HOOKS (Linux / macOS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+On Linux, VanHooks patches the GOT entry read by the PLT stub.
+On macOS, VanHooks patches the dyld lazy pointer table.
+
+    Result<HookHandle> eng.hook_plt(
+        void*       detour,
+        PLTOptions  opts
+    );
+
+PLTOptions struct:
+    struct PLTOptions {
+        std::string library_name;  // e.g. "libc" or "libc.so.6"
+        std::string symbol_name;   // e.g. "malloc"
+        std::string tag;
+    };
+
+Linux internal: uses dl_iterate_phdr to walk loaded shared objects,
+finds the PT_DYNAMIC segment, locates DT_JMPREL (PLT relocations) and
+DT_SYMTAB, matches the symbol name, patches the GOT slot with mprotect.
+
+macOS internal: walks the Mach-O __DATA,__la_symbol_ptr section to find
+lazy pointer entries, patches with mprotect.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.11  VTABLE HOOKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VTable hooks patch a single virtual function pointer in a C++ vtable
+(or a COM interface vtable). No function bytes are modified.
+
+    Result<HookHandle> eng.hook_vtable(
+        void*          detour,
+        VTableOptions  opts
+    );
+
+VTableOptions struct:
+    struct VTableOptions {
+        void**      vtable;      // pointer to the vtable array
+        size_t      slot_index;  // which slot to patch (0-indexed)
+        std::string tag;
+    };
+
+Getting the vtable pointer from a live COM object:
+    void** vtbl = *reinterpret_cast<void***>(pComObject);
+    // vtbl[0] = QueryInterface, vtbl[1] = AddRef, vtbl[2] = Release, ...
+
+Getting the vtable pointer from a live C++ object:
+    void** vtbl = *reinterpret_cast<void***>(pObject);
+    // equivalent to vanhooks::tables::vtable_of(pObject)
+
+Helper in tables.hpp (available but not required):
+    inline void** vanhooks::tables::vtable_of(const void* object) noexcept {
+        return *reinterpret_cast<void***>(const_cast<void*>(object));
+    }
+
+Example — hooking IDirect3DDevice9::Present (vtable slot 17):
+    using PFN_Present = HRESULT(STDMETHODCALLTYPE*)(
+        IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
+
+    static PFN_Present orig_Present = nullptr;
+
+    HRESULT STDMETHODCALLTYPE hk_Present(
+        IDirect3DDevice9* dev,
+        CONST RECT* pSrc, CONST RECT* pDst,
+        HWND hWnd, CONST RGNDATA* pDirty)
+    {
+        // overlay logic here
+        return orig_Present(dev, pSrc, pDst, hWnd, pDirty);
+    }
+
+    void** vtbl = *reinterpret_cast<void***>(pDevice);
+    orig_Present = reinterpret_cast<PFN_Present>(vtbl[17]);
+
+    auto r = eng.hook_vtable(
+        (void*)&hk_Present,
+        vanhooks::VTableOptions{ .vtable = vtbl, .slot_index = 17,
+                                  .tag = "Present" }
+    );
+
+Known IDirect3DDevice9 vtable slot indices (D3D9 SDK standard):
+    0  = QueryInterface       17 = Present
+    1  = AddRef               18 = GetBackBuffer
+    2  = Release              19 = GetRasterStatus
+    3  = TestCooperativeLevel 20 = SetDialogBoxMode
+    4  = GetAvailableTextureMem  21 = SetGammaRamp
+    5  = EvictManagedResources   22 = GetGammaRamp
+    6  = GetDirect3D          23 = CreateTexture
+    7  = GetDeviceCaps        ...
+    8  = GetDisplayMode       36 = BeginScene
+    9  = GetCreationParameters 37 = EndScene
+    10 = SetCursorProperties  38 = Clear
+    11 = SetCursorPosition    39 = SetTransform
+    12 = ShowCursor           40 = GetTransform
+    13 = CreateAdditionalSwapChain  41 = MultiplyTransform
+    14 = GetSwapChain         42 = SetViewport
+    15 = GetNumberOfSwapChains 43 = GetViewport
+    16 = Reset                ...
+
+Internal mechanism: calls VirtualProtect/mprotect on exactly sizeof(void*)
+bytes at &vtable[slot_index] (not from the vtable base — avoids the common
+bug of protecting index*sizeof bytes from the base which may cross a page
+boundary). Writes detour pointer. Restores protection. Returns original value.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.12  MID-FUNCTION HOOKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Mid-function hooks insert a callback at an arbitrary instruction boundary
+inside a function body. The original instructions still execute after the
+callback returns. The callback receives a MidContext* with all GPRs and
+flags at the hook site. This is VanHooks' primary differentiator from MinHook.
+
+    Result<HookHandle> eng.hook_mid(
+        void*             target,        // function start address
+        size_t            byte_offset,   // requested byte offset into function
+        MidCallback       callback,      // void(*)(MidContext*) noexcept
+        TrampolineOptions opts = {}
+    );
+
+byte_offset is rounded UP to the nearest complete instruction boundary.
+On ARM64 this is (byte_offset + 3) & ~3.
+On x86/x64 the disassembler decodes from offset 0 until the accumulated
+byte count reaches or exceeds byte_offset, then returns that count.
+
+MidCallback type:
+    using MidCallback = void (*)(MidContext*) noexcept;
+    // Must be noexcept — runs with a modified stack frame.
+    // Must not throw. Must not call back into hooks that acquire VanHooks mutex.
+
+MidContext struct (full layout, x64):
+    struct alignas(8) MidContext {
+        uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+        uint64_t rdi, rsi, rbp, rbx, rdx, rcx, rax;
+        uint64_t rflags;   // saved by PUSHFQ, restored by POPFQ
+    };
+
+MidContext struct (x86):
+    struct alignas(8) MidContext {
+        uint32_t edi, esi, ebp, ebx, edx, ecx, eax;
+        uint32_t eflags;
+    };
+
+MidContext struct (ARM64):
+    struct alignas(8) MidContext {
+        uint64_t x[8];   // x0..x7, offsets 0..56
+        uint64_t lr;     // x30, offset 64
+        uint64_t _pad;   // alignment, offset 72
+    };
+
+Trampoline stub layout (x64 Windows, ~83 bytes total):
+    PUSHFQ
+    PUSH rax, rcx, rdx, rbx, rbp, rsi, rdi, r8..r15  (15 pushes = 120 bytes on stack)
+    SUB  RSP, 8                                         (align to 16)
+    LEA  RCX, [RSP+8]                                   (MidContext* arg, Windows ABI)
+    SUB  RSP, 32                                        (shadow space, Windows only)
+    MOV  RAX, <callback address>
+    CALL RAX
+    ADD  RSP, 32                                        (Windows only)
+    ADD  RSP, 8
+    POP  r15..r8, rdi, rsi, rbp, rbx, rdx, rcx, rax
+    POPFQ
+    [relocated stolen bytes]
+    JMP  <target + patch_offset + stolen_byte_count>
+
+Example — observe register state at a specific point in a function:
+    static void on_tick(vanhooks::MidContext* ctx) noexcept {
+        // read rax at this instruction:
+        uint64_t val = ctx->rax;
+        // modify rdx:
+        ctx->rdx = 0x12345678;
+        // original instructions still execute after return
+    }
+
+    eng.hook_mid(fn_ptr, 0, on_tick);            // at function entry
+    eng.hook_mid(fn_ptr, 24, on_tick);           // 24 bytes in (rounded to boundary)
+
+No original-out pointer is provided for mid hooks — they observe/modify
+register state, they do not redirect control flow.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.13  LIFECYCLE OPERATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Per-hook:
+    Status eng.enable (HookHandle h);   // re-apply cached patch bytes
+    Status eng.disable(HookHandle h);   // write back saved original bytes
+    Status eng.remove (HookHandle h);   // disable + free trampoline slot
+
+Bulk:
+    Status eng.enable_all ();
+    Status eng.disable_all();
+    Status eng.remove_all ();
+
+remove() refuses to remove a hook that has chain children registered on it.
+You must remove chain links in reverse order before removing the base.
+
+Error codes to expect:
+    HookNotFound        — handle was already removed or never existed
+    HookAlreadyEnabled  — called enable() on an already-enabled hook
+    HookAlreadyDisabled — called disable() on an already-disabled hook
+    ChainOrderViolation — tried to remove a base hook before its chain links
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.14  BATCH QUEUE API
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Installing many hooks individually suspends and resumes all threads once
+per hook (when thread_safe=true). The batch queue amortizes this cost:
+
+    void   eng.queue_enable (HookHandle h);
+    void   eng.queue_disable(HookHandle h);
+    void   eng.queue_remove (HookHandle h);
+    Status eng.apply_queued();            // one suspend/resume cycle
+    void   eng.clear_queue() noexcept;
+    size_t eng.queue_size()  const noexcept;
+
+apply_queued():
+  1. Snapshots the queue under the mutex.
+  2. Creates one ThreadFence (suspends all threads).
+  3. Applies all queued operations under the mutex while fence is held.
+  4. ThreadFence destructs (resumes all threads).
+
+Example:
+    eng.queue_enable(h1);
+    eng.queue_enable(h2);
+    eng.queue_disable(h3);
+    eng.queue_remove(h4);
+    auto r = eng.apply_queued();  // one suspension, all ops atomic
+    if (!r && r.error() != vanhooks::Error::QueueEmpty) { /* handle */ }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.15  HOOK CHAINING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Chain a second (or third) detour onto an already-hooked target:
+
+    Result<HookHandle> eng.chain(
+        HookHandle   base,
+        void*        next_detour,
+        void**       next_original_out = nullptr,
+        std::string  tag = {}
+    );
+
+Call chain with two detours:
+    target → detour2 → detour1 → original
+
+next_original_out receives the previous detour's address (detour1), NOT the
+trampoline. Calling it runs: detour1 → trampoline → real original.
+
+Removal MUST be in reverse install order:
+    eng.remove(link);   // link before base — ChainOrderViolation otherwise
+    eng.remove(base);
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.16  THREADFENCE — INTERNAL DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ThreadFence is in trampoline.hpp. You do not normally use it directly —
+it is created automatically by VanHooks when thread_safe=true. Documented
+here for completeness and for use in advanced apply_queued() scenarios.
+
+    class ThreadFence {
+    public:
+        ThreadFence();          // suspends all threads except caller
+        ~ThreadFence();         // resumes all suspended threads
+
+        bool  ok()                   const noexcept;
+        Error error()                const noexcept;
+        size_t suspended_count()     const noexcept;
+
+        bool ip_in_range(uint64_t range_start, size_t range_bytes) const noexcept;
+
+        void fix_ip_range(uint64_t from_start, size_t from_bytes,
+                          uint64_t to_addr) noexcept;
+    };
+
+ip_fixup_on_remove (Engine member, default true):
+    When removing a trampoline hook, if a suspended thread's instruction
+    pointer lands inside the stolen prologue bytes, fix_ip_range advances
+    it to target + stolen_byte_count so execution continues correctly
+    in the restored original. Only effective when thread_safe=true.
+
+Platform details:
+  Windows : NtGetNextThread loop
+  Linux   : /proc/self/task directory iteration + PTRACE_ATTACH or tgkill
+  macOS   : task_threads() Mach API
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.17  MEMORY SUBSYSTEM — INTERNAL DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+memory.hpp — namespace vanhooks::memory
+
+ScopedWritable:
+    RAII guard that temporarily makes a region writable and restores
+    protection on destruction. Used internally for all vtable and
+    trampoline writes. Never produces RWX pages — regions are RW during
+    the write, then restored (or explicitly flipped to RX via mark_exec()).
+
+    memory::ScopedWritable guard(addr, size);
+    if (!guard.ok()) return std::unexpected(guard.error());
+    std::memcpy(addr, patch.data(), patch.size());
+    // protection restored by guard destructor
+
+mark_exec(void* addr, size_t size):
+    Flips a region from RW to PAGE_EXECUTE_READ (Windows) or PROT_READ|PROT_EXEC
+    (POSIX). Must be called after writing trampoline code into a slot.
+    Returns MemoryProtectFailed if the OS rejects it (e.g. ACG on anonymous memory).
+
+flush_icache(void* addr, size_t size):
+    Flushes the instruction cache. Required on ARM64. No-op on x86/x64
+    (cache coherent on all x86 CPUs). Always safe to call on any platform.
+
+TrampolineAllocator:
+    Allocates 128-byte slots in slabs positioned near the target address
+    so that rel32 JMP encoding (±2GB) is always possible on x64.
+    Falls back to absolute encoding automatically when near allocation fails.
+    SLOT_SIZE = 128 bytes (ARM64 worst case).
+
+    On Windows x64, also probes code caves in nearby loaded DLLs for slot
+    allocation when VirtualAlloc near-target probing fails. Each cave slot
+    stores original_bytes for restoration and an on_free callback.
+
+Protect enum:
+    None, Read, Write, Execute, ReadWrite, ReadExec, ReadWriteExec
+
+within_rel32(from, to):
+    Returns true if (to - from) fits in int32_t range (±2GB).
+    Always returns true on 32-bit platforms.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.18  DISASSEMBLER — INTERNAL DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+disasm.hpp — namespace vanhooks::disasm
+
+Backend: Zydis for x86/x64. ARM64 uses a manual fixed-width 4-byte decoder.
+
+Arch enum: X86, X64, ARM64, Unknown
+detect_arch() — constexpr, detects at compile time from predefined macros.
+
+InsnKind enum:
+    Generic, Call, Jump, JumpConditional, Return, Nop,
+    RipRelative, PcRelative, Privileged
+
+Instruction struct:
+    uint64_t    address
+    uint8_t     length          (1-15 x86/x64, always 4 ARM64)
+    InsnKind    kind
+    uint8_t     bytes[16]
+    optional<uint64_t> absolute_target  (for RIP/PC-relative instructions)
+    string      mnemonic        (debug builds)
+
+    bool is_branch()   — Jump, JumpConditional, or Call
+    bool is_terminal() — Jump or Return
+    bool is_relative() — RipRelative or PcRelative
+
+Disassembler methods:
+    Result<Instruction>              decode_one(span, runtime_address)
+    Result<vector<Instruction>>      decode_min_bytes(span, runtime_address, min_bytes)
+    static size_t                    total_length(vector<Instruction>)
+
+find_safe_patch_point(code, runtime_address, byte_offset, arch):
+    Returns the byte offset of the nearest instruction boundary at or after
+    byte_offset. Never splits an instruction. Used by hook_mid().
+
+rewrite_for_relocation(insns, original_base, new_base, arch):
+    Returns rewritten bytes with RIP/PC-relative references fixed up for
+    the new location. Used by the trampoline builder to relocate stolen bytes.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.19  STRING OBFUSCATION — OBFSTR.HPP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+obfstr.hpp is internal to VanHooks (in src/, not include/).
+Documented here because it is used for all sensitive string literals
+inside engine.cpp (ntdll.dll, NtCreateThreadEx, amsi.dll, etc.).
+
+Mechanism: compile-time XOR with per-position key:
+    key(pos, len) = 0x4E ^ (pos * 0x1B) ^ (len * 0x37) ^ ((pos>>2) * 0x5D)
+Plaintext strings never appear in .rdata — only XOR'd bytes are stored.
+
+Usage pattern (internal to VanHooks, not for application code):
+    static constexpr ObfStr enc_ntdll("ntdll.dll");
+    char buf[enc_ntdll.size()]{};
+    enc_ntdll.decode(buf);
+    // use buf
+    SecureZeroMemory(buf, sizeof(buf));
+
+Macro shorthand used in engine.cpp:
+    VH_DECODE(var, obf_str)
+    // expands to: char var[obf_str.size()]{}; obf_str.decode(var);
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.20  MIGRATING FROM MINHOOK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MinHook API → VanHooks API mapping:
+
+    MH_Initialize()                → not needed (global_engine() ready on first use)
+    MH_Uninitialize()              → not needed (Engine destructor calls remove_all())
+    MH_CreateHook(target, det, &orig) → eng.hook_trampoline(target, det, &orig)
+    MH_CreateHookApi("mod","fn",det,&orig) → eng.hook_api("mod","fn",det,&orig)
+    MH_EnableHook(MH_ALL_HOOKS)    → eng.enable_all()
+    MH_DisableHook(MH_ALL_HOOKS)   → eng.disable_all()
+    MH_EnableHook(target)          → eng.enable(handle)
+    MH_DisableHook(target)         → eng.disable(handle)
+    MH_RemoveHook(target)          → eng.remove(handle)
+    MH_QueueEnableHook(target)     → eng.queue_enable(handle)
+    MH_QueueDisableHook(target)    → eng.queue_disable(handle)
+    MH_ApplyQueued()               → eng.apply_queued()
+    MH_StatusToString(st)          → vanhooks::error_to_string(e)
+
+Key behavioral differences:
+    - VanHooks tracks hooks by HookHandle, not by target address.
+      Keep the returned HookHandle from every hook() call.
+    - The typed hook<Fn>() template catches signature mismatches at compile
+      time. MinHook uses LPVOID everywhere — mismatches are runtime crashes.
+    - No MH_Initialize / MH_Uninitialize lifecycle to manage.
+    - enable_all() / disable_all() hold the mutex for the entire operation,
+      eliminating TOCTOU windows that MinHook's per-hook locking had.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.21  CRITICAL RULE — HOOK INSTALLATION TIMING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NEVER install hooks from DllMain or from any thread that holds the loader lock.
+
+VirtualProtect (called internally) acquires the memory manager lock.
+If any suspended thread holds that lock (common during DLL init), the
+hook thread deadlocks permanently.
+
+WRONG pattern:
+    case DLL_PROCESS_ATTACH:
+        Sleep(1000);          // still racy
+        InstallHooks();       // deadlocks if main thread holds D3D/loader locks
+
+CORRECT pattern — install from inside the first Present() call:
+    HRESULT STDMETHODCALLTYPE hk_Present(...) {
+        static std::once_flag once;
+        std::call_once(once, []() {
+            // Main thread is inside Present — not in any hook site.
+            // Safe to install with thread_safe=false.
+            vanhooks::TrampolineOptions opts{ .thread_safe = false };
+            eng.hook_mid(addr, 0, callback, opts);
+        });
+        return orig_Present(...);
+    }
+
+When to use thread_safe=false:
+    You know exactly where the main thread is (inside Present, EndScene, etc.)
+    and it is NOT at any of the hook sites. No thread suspension overhead.
+
+When to use thread_safe=true (default):
+    Installing from a generic background thread where you cannot guarantee
+    the main thread is away from the hook sites.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.22  REENTRANCY GUARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Detours that call back into hooked functions need a per-thread guard:
+
+    thread_local bool tls_in_hook = false;
+
+    int detour_fn(int x) {
+        if (tls_in_hook) return orig_fn(x);  // bypass — already in hook
+        tls_in_hook = true;
+        int result = orig_fn(x);
+        tls_in_hook = false;
+        return result;
+    }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.23  COMMON FAILURE MODES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+HookInstallFailed
+    Target function prologue is too short for a trampoline patch.
+    Use IAT hook instead.
+
+MemoryAllocationFailed
+    No executable memory could be allocated near the target within ±2GB.
+    Increase trampoline_pool_size or use force_abs_jump option.
+
+InstructionTooShort
+    Disassembler cannot safely steal enough bytes (function body too small).
+    Use IAT hook or VTable hook instead.
+
+ThreadSuspendFailed
+    Thread enumeration failed. Possible causes: dying process, HVCI active,
+    or insufficient privileges. Use thread_safe=false from a controlled context.
+
+ThreadInPrologue
+    A suspended thread's IP is inside the stolen bytes. VanHooks will attempt
+    ip_fixup if ip_fixup_on_remove=true. If it returns this error, retry.
+
+HookAlreadyExists
+    Tried to hook the same target address twice via hook_trampoline().
+    Use eng.chain() to add a second detour instead.
+
+ChainOrderViolation
+    Tried to remove a base hook before removing its chain links.
+    Remove in reverse install order.
+
+Hook silently disappears at runtime
+    A kernel-mode driver restored the original bytes.
+    Enable Config::enable_integrity_watchdog.
+
+Game crashes on hook install (not on first frame)
+    Installing from DllMain or a timed background thread that fires while
+    the main thread holds D3D or loader locks. Install from Present() instead.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1.24  COMPLETE USAGE EXAMPLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    #include <vanhooks/vanhooks.hpp>
+
+    // --- trampoline hook (typed) ---
+    static int (*orig_add)(int, int) = nullptr;
+
+    int detour_add(int a, int b) {
+        printf("add(%d, %d)\n", a, b);
+        return orig_add(a, b);
+    }
+
+    // --- vtable hook ---
+    using PFN_Present = HRESULT(STDMETHODCALLTYPE*)(
+        IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
+    static PFN_Present orig_Present = nullptr;
+
+    HRESULT STDMETHODCALLTYPE hk_Present(
+        IDirect3DDevice9* dev,
+        CONST RECT* pSrc, CONST RECT* pDst,
+        HWND hWnd, CONST RGNDATA* pDirty)
+    {
+        static std::once_flag once;
+        std::call_once(once, [dev]() {
+            // Safe install from first Present() — thread_safe=false
+            vanhooks::TrampolineOptions opts{ .thread_safe = false,
+                                              .tag = "add_hook" };
+            vanhooks::global_engine().hook(
+                &add, &detour_add, &orig_add, opts);
+        });
+        return orig_Present(dev, pSrc, pDst, hWnd, pDirty);
+    }
+
+    void install_present_hook(IDirect3DDevice9* pDevice) {
+        void** vtbl = *reinterpret_cast<void***>(pDevice);
+        orig_Present = reinterpret_cast<PFN_Present>(vtbl[17]);
+
+        auto r = vanhooks::global_engine().hook_vtable(
+            (void*)&hk_Present,
+            vanhooks::VTableOptions{ .vtable = vtbl,
+                                      .slot_index = 17,
+                                      .tag = "Present" });
+        if (!r)
+            printf("hook_vtable failed: %s\n",
+                vanhooks::error_to_string(r.error()).data());
+    }
+
+    void teardown() {
+        vanhooks::global_engine().remove_all();
+    }
+
+
+────────────────────────────────────────────────────────────────────────────────
+PART 2 — VANGUI
+────────────────────────────────────────────────────────────────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.1  WHAT VANGUI IS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VanGUI is Dear ImGui with systematically renamed identifiers. Every ImGui
+symbol is renamed with a Van prefix or vangui namespace. The rendering
+pipeline, widget system, draw list, font atlas, and all backends are
+structurally identical to Dear ImGui. Any Dear ImGui documentation, tutorial,
+or example applies 1:1 — only the names differ.
+
+Rename mapping (non-exhaustive):
+    imgui*           → vangui*
+    ImGui::          → VanGui:: (namespace)
+    IMGUI_*          → VANGUI_*
+    ImGuiIO          → VanGuiIO
+    ImGuiStyle       → VanGuiStyle
+    ImGuiWindowFlags → VanGuiWindowFlags
+    ImVec2           → VanVec2
+    ImVec4           → VanVec4
+    ImDrawList       → VanDrawList
+    ImFont           → VanFont
+    ImFontAtlas      → VanFontAtlas
+    ImTextureID      → VanTextureID
+    ImGuiCol_*       → VanGuiCol_*
+    ImGuiCond_*      → VanGuiCond_*
+    ImGuiConfigFlags_* → VanGuiConfigFlags_*
+    stb_*            → vanstb_* (internal, not public API)
+    IMGUI_CHECKVERSION() → VANGUI_CHECKVERSION()
+    imgui_impl_dx9.h → vangui_impl_dx9.h
+    imgui_impl_win32.h → vangui_impl_win32.h
+    ImGui_ImplDX9_*  → VanGui_ImplDX9_*
+    ImGui_ImplWin32_* → VanGui_ImplWin32_*
+
+Architecture: Immediate mode GUI. Every widget is created and evaluated each
+frame. No persistent widget objects or callback registration.
+Output: optimized vertex buffers passed to the renderer backend.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.2  FILE LAYOUT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Core (compile these into your project):
+    src/vangui.cpp               — core implementation
+    src/vangui_draw.cpp          — draw list, geometry, clipping
+    src/vangui_tables.cpp        — table/column system
+    src/vangui_widgets.cpp       — all standard widgets
+    src/vangui_demo.cpp          — demo window (optional, exclude from release)
+
+Core headers (include path: inc/):
+    inc/vangui.h                 — public API (include this)
+    inc/vangui_internal.h        — internal types (rarely needed)
+    inc/vanconfig.h              — compile-time configuration overrides
+    inc/vangui_module_pch.h      — PCH for C++20 module builds
+    inc/vanstb_rectpack.h        — internal (rect packing for font atlas)
+    inc/vanstb_truetype.h        — internal (TrueType font rasterizer)
+    inc/vanstb_textedit.h        — internal (text editing state)
+
+Backends (pick one platform + one renderer):
+    backends/vangui_impl_win32.h / .cpp    — Win32 platform (Windows)
+    backends/vangui_impl_dx9.h  / .cpp     — DirectX 9 renderer
+    backends/vangui_impl_dx10.h / .cpp     — DirectX 10 renderer
+    backends/vangui_impl_dx11.h / .cpp     — DirectX 11 renderer
+    backends/vangui_impl_dx12.h / .cpp     — DirectX 12 renderer
+    backends/vangui_impl_vulkan.h / .cpp   — Vulkan renderer
+    backends/vangui_impl_opengl3.h / .cpp  — OpenGL 3 renderer
+    backends/vangui_impl_opengl2.h / .cpp  — OpenGL 2 renderer
+    backends/vangui_impl_metal.h / .mm     — Metal renderer (macOS)
+    backends/vangui_impl_glfw.h / .cpp     — GLFW platform
+    backends/vangui_impl_sdl2.h / .cpp     — SDL2 platform
+    backends/vangui_impl_sdl3.h / .cpp     — SDL3 platform
+    backends/vangui_impl_osx.h  / .mm      — macOS platform
+    backends/vangui_impl_android.h / .cpp  — Android platform
+    backends/vangui_impl_null.h / .cpp     — null backend (testing)
+
+C++20 module wrappers (src/modules/ — optional, for import vangui; syntax):
+    src/modules/vangui.ixx           — umbrella module
+    src/modules/vangui-core.ixx      — core compilation unit as module
+    src/modules/vangui-draw.ixx      — draw list as module
+    src/modules/vangui-tables.ixx    — tables as module
+    src/modules/vangui-widgets.ixx   — widgets as module
+    src/modules/vangui-docking.ixx   — docking as module
+
+Misc extras (optional, not required for basic use):
+    misc/vangui_notify.h / .cpp          — toast notification system
+    misc/vangui_node_graph.h / .cpp      — node graph editor
+    misc/vangui_command_palette.h / .cpp — command palette widget
+    misc/vangui_theme_engine.h / .cpp    — theme engine
+    misc/vangui_theme_editor.h / .cpp    — theme editor window
+    misc/vangui_themes.h / .cpp          — preset theme collection
+    misc/freetype/vangui_freetype.h / .cpp — FreeType font rasterizer
+    misc/cpp/vangui_stdlib.h / .cpp      — std::string / std::string_view helpers
+    misc/single_file/vangui_single_file.h — single-header distribution
+    misc/fonts/                          — bundled fonts (ProggyClean, Roboto, etc.)
+    misc/debuggers/vangui.natvis         — Visual Studio natvis (struct pretty-print)
+    misc/debuggers/vangui.natstepfilter  — VS step-filter (skip VanGUI internals)
+    misc/debuggers/vangui.gdb            — GDB pretty-printers
+    misc/debuggers/vangui_lldb.py        — LLDB pretty-printers
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.3  CMAKE INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VanGUI is not a FetchContent library — vendor it directly.
+Minimum compile list for a DX9 + Win32 overlay:
+
+    set(VANGUI_DIR "${CMAKE_SOURCE_DIR}/external/vangui")
+
+    set(VANGUI_SOURCES
+        ${VANGUI_DIR}/src/vangui.cpp
+        ${VANGUI_DIR}/src/vangui_draw.cpp
+        ${VANGUI_DIR}/src/vangui_tables.cpp
+        ${VANGUI_DIR}/src/vangui_widgets.cpp
+        ${VANGUI_DIR}/backends/vangui_impl_dx9.cpp
+        ${VANGUI_DIR}/backends/vangui_impl_win32.cpp
+    )
+
+    target_sources(my_target PRIVATE ${VANGUI_SOURCES})
+    target_include_directories(my_target PRIVATE
+        ${VANGUI_DIR}/inc
+        ${VANGUI_DIR}/backends
+    )
+
+No CMakeLists.txt is required inside the vangui directory — just add sources
+and include paths to your own target. This is identical to how Dear ImGui
+is typically integrated.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.4  DX9 + WIN32 BACKEND INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is the most common configuration for Windows D3D9 overlays.
+
+Required headers:
+    #include "vangui.h"
+    #include "vangui_impl_win32.h"
+    #include "vangui_impl_dx9.h"
+
+    // Declare the WndProc handler (defined in vangui_impl_win32.cpp):
+    extern VANGUI_IMPL_API LRESULT
+        VanGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
+
+Initialization (call once, after CreateDevice, from first Present()):
+    VANGUI_CHECKVERSION();
+    VanGui::CreateContext();
+
+    VanGuiIO& io = VanGui::GetIO();
+    io.ConfigFlags |= VanGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = nullptr;      // disable .ini persistence if not wanted
+
+    VanGui::StyleColorsDark();     // or StyleColorsLight(), StyleColorsClassic()
+
+    VanGui_ImplWin32_Init(hWnd);   // pass the game window HWND
+    VanGui_ImplDX9_Init(pDevice);  // pass IDirect3DDevice9*
+    VanGui_ImplDX9_CreateDeviceObjects();
+
+Per-frame rendering (call inside Present hook, within BeginScene/EndScene):
+    VanGui_ImplDX9_NewFrame();
+    VanGui_ImplWin32_NewFrame();
+    VanGui::NewFrame();
+
+    // --- build UI ---
+    VanGui::Begin("My Window");
+    VanGui::Text("Hello World");
+    VanGui::End();
+    // --- end UI ---
+
+    VanGui::Render();
+    VanGui_ImplDX9_RenderDrawData(VanGui::GetDrawData());
+
+Device Reset handling:
+    // Before IDirect3DDevice9::Reset():
+    VanGui_ImplDX9_InvalidateDeviceObjects();
+
+    // After IDirect3DDevice9::Reset() succeeds:
+    VanGui_ImplDX9_CreateDeviceObjects();
+
+    // Do NOT call Init/Shutdown on Reset — only Invalidate/Create.
+    // Full Shutdown/Init on Reset causes double-initialization crashes.
+
+Shutdown (call on DLL_PROCESS_DETACH):
+    VanGui_ImplDX9_Shutdown();
+    VanGui_ImplWin32_Shutdown();
+    VanGui::DestroyContext();
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.5  WNDPROC SUBCLASS INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+To give VanGUI keyboard and mouse input, subclass the game window's WndProc:
+
+    static WNDPROC g_origWndProc = nullptr;
+
+    static LRESULT CALLBACK MyWndProc(HWND hWnd, UINT msg,
+                                       WPARAM wParam, LPARAM lParam)
+    {
+        if (VanGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+            return TRUE;
+
+        VanGuiIO& io = VanGui::GetIO();
+
+        // Block mouse messages from reaching game when VanGUI wants mouse:
+        if (io.WantCaptureMouse) {
+            switch (msg) {
+            case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+            case WM_RBUTTONDOWN: case WM_RBUTTONUP:
+            case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+            case WM_MOUSEWHEEL:  case WM_MOUSEMOVE:
+            case WM_XBUTTONDOWN: case WM_XBUTTONUP:
+                return 0;
+            }
+        }
+
+        // Block keyboard messages when VanGUI wants keyboard:
+        if (io.WantCaptureKeyboard) {
+            switch (msg) {
+            case WM_KEYDOWN: case WM_KEYUP:
+            case WM_SYSKEYDOWN: case WM_SYSKEYUP:
+            case WM_CHAR:
+                return 0;
+            }
+        }
+
+        return CallWindowProcW(g_origWndProc, hWnd, msg, wParam, lParam);
+    }
+
+    // Install:
+    g_origWndProc = reinterpret_cast<WNDPROC>(
+        GetWindowLongPtrW(hWnd, GWLP_WNDPROC));
+    SetWindowLongPtrW(hWnd, GWLP_WNDPROC,
+        reinterpret_cast<LONG_PTR>(MyWndProc));
+
+    // Remove (on shutdown):
+    SetWindowLongPtrW(hWnd, GWLP_WNDPROC,
+        reinterpret_cast<LONG_PTR>(g_origWndProc));
+    g_origWndProc = nullptr;
+
+IMPORTANT: Guard against double-installation. If g_origWndProc is already set,
+do not call SetWindowLongPtrW again — you would overwrite the saved original
+with your own CfWndProc pointer, making restore impossible.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.6  VANGUIIO — KEY FIELDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    VanGuiIO& io = VanGui::GetIO();
+
+    io.ConfigFlags           — bitfield of VanGuiConfigFlags_* values
+    io.DisplaySize           — VanVec2, set by Win32 backend from client rect
+    io.DeltaTime             — float, time since last frame in seconds
+    io.IniFilename           — const char*, set to nullptr to disable .ini
+    io.WantCaptureMouse      — true when VanGUI owns mouse input
+    io.WantCaptureKeyboard   — true when VanGUI owns keyboard input
+    io.WantTextInput         — true when a text field is focused
+    io.Framerate             — estimated FPS (rolling average)
+
+ConfigFlags values:
+    VanGuiConfigFlags_NavEnableKeyboard   — keyboard navigation
+    VanGuiConfigFlags_NavEnableGamepad    — gamepad navigation
+    VanGuiConfigFlags_DockingEnable       — docking (docking branch)
+    VanGuiConfigFlags_ViewportsEnable     — multi-viewport (docking branch)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.7  VANGUISTYLE — THEMING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    VanGuiStyle& style = VanGui::GetStyle();
+
+    style.WindowRounding       — float
+    style.FrameRounding        — float
+    style.GrabRounding         — float
+    style.ScrollbarRounding    — float
+    style.WindowBorderSize     — float (0 = no border)
+    style.FramePadding         — VanVec2
+    style.ItemSpacing          — VanVec2
+    style.WindowPadding        — VanVec2
+    style.IndentSpacing        — float
+    style.ScrollbarSize        — float
+    style.GrabMinSize          — float
+    style.Alpha                — float (global opacity)
+
+Color indices (VanGuiCol_*):
+    VanGuiCol_WindowBg         — window background
+    VanGuiCol_ChildBg          — child window background
+    VanGuiCol_PopupBg          — popup background
+    VanGuiCol_Border           — borders
+    VanGuiCol_FrameBg          — checkbox/slider/input bg (normal)
+    VanGuiCol_FrameBgHovered   — hovered
+    VanGuiCol_FrameBgActive    — active/pressed
+    VanGuiCol_TitleBg          — title bar (collapsed)
+    VanGuiCol_TitleBgActive    — title bar (focused)
+    VanGuiCol_TitleBgCollapsed — title bar (collapsed)
+    VanGuiCol_MenuBarBg        — menu bar
+    VanGuiCol_ScrollbarBg      — scrollbar background
+    VanGuiCol_ScrollbarGrab    — scrollbar grab
+    VanGuiCol_CheckMark        — checkbox tick
+    VanGuiCol_SliderGrab       — slider grab
+    VanGuiCol_SliderGrabActive — slider grab active
+    VanGuiCol_Button           — button (normal)
+    VanGuiCol_ButtonHovered    — button hovered
+    VanGuiCol_ButtonActive     — button pressed
+    VanGuiCol_Header           — TreeNode/Selectable header
+    VanGuiCol_HeaderHovered
+    VanGuiCol_HeaderActive
+    VanGuiCol_Separator
+    VanGuiCol_Tab
+    VanGuiCol_TabHovered
+    VanGuiCol_TabActive
+    VanGuiCol_TabUnfocused
+    VanGuiCol_TabUnfocusedActive
+    VanGuiCol_Text
+    VanGuiCol_TextDisabled
+    VanGuiCol_COUNT            — total count
+
+Color values are VanVec4 (r, g, b, a) in [0, 1] range.
+
+Preset themes:
+    VanGui::StyleColorsDark();       — default dark
+    VanGui::StyleColorsLight();      — light
+    VanGui::StyleColorsClassic();    — classic
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.8  WINDOW API
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    bool VanGui::Begin(const char* name, bool* p_open = nullptr,
+                       VanGuiWindowFlags flags = 0);
+    void VanGui::End();
+
+    // Must always call End() even if Begin() returns false.
+
+    VanGui::SetNextWindowPos(VanVec2 pos, VanGuiCond cond = 0,
+                              VanVec2 pivot = {0,0});
+    VanGui::SetNextWindowSize(VanVec2 size, VanGuiCond cond = 0);
+    VanGui::SetNextWindowSizeConstraints(VanVec2 size_min, VanVec2 size_max);
+    VanGui::SetNextWindowCollapsed(bool collapsed, VanGuiCond cond = 0);
+    VanGui::SetNextWindowFocus();
+    VanGui::SetNextWindowBgAlpha(float alpha);
+
+VanGuiCond values:
+    VanGuiCond_Always     — set every frame
+    VanGuiCond_Once       — set once (first time window appears)
+    VanGuiCond_FirstUseEver — set if no .ini data
+    VanGuiCond_Appearing  — set when window transitions to visible
+
+VanGuiWindowFlags values (most common):
+    VanGuiWindowFlags_NoTitleBar
+    VanGuiWindowFlags_NoResize
+    VanGuiWindowFlags_NoMove
+    VanGuiWindowFlags_NoScrollbar
+    VanGuiWindowFlags_NoCollapse
+    VanGuiWindowFlags_AlwaysAutoResize
+    VanGuiWindowFlags_NoBackground
+    VanGuiWindowFlags_NoSavedSettings
+    VanGuiWindowFlags_MenuBar
+    VanGuiWindowFlags_HorizontalScrollbar
+    VanGuiWindowFlags_NoFocusOnAppearing
+    VanGuiWindowFlags_NoBringToDisplayOnFocus
+    VanGuiWindowFlags_NoNav
+    VanGuiWindowFlags_NoDecoration  (= NoTitleBar|NoResize|NoScrollbar|NoCollapse)
+    VanGuiWindowFlags_NoInputs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.9  COMMON WIDGETS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Text:
+    VanGui::Text("format %d", value);
+    VanGui::TextColored(VanVec4(1,0,0,1), "red text");
+    VanGui::TextDisabled("grayed out");
+    VanGui::TextWrapped("long text that wraps...");
+    VanGui::LabelText("label", "value");
+
+Buttons:
+    if (VanGui::Button("Click Me", VanVec2(100, 0))) { /* clicked */ }
+    if (VanGui::SmallButton("small")) { /* clicked */ }
+    if (VanGui::ArrowButton("##id", VanGuiDir_Right)) { /* clicked */ }
+    if (VanGui::InvisibleButton("##id", VanVec2(50, 50))) { /* clicked */ }
+
+Checkboxes / Radio:
+    static bool enabled = false;
+    VanGui::Checkbox("Enable Feature", &enabled);
+
+    static int radio = 0;
+    VanGui::RadioButton("Option A", &radio, 0);
+    VanGui::RadioButton("Option B", &radio, 1);
+
+Sliders:
+    static float f = 0.5f;
+    VanGui::SliderFloat("Float", &f, 0.0f, 1.0f);
+    VanGui::SliderFloat("##id", &f, 0.0f, 1.0f, "%.3f");
+
+    static int i = 50;
+    VanGui::SliderInt("Int", &i, 0, 100);
+
+    static float v[3] = {0,0,0};
+    VanGui::SliderFloat3("Vec3", v, -1.0f, 1.0f);
+
+Drag:
+    VanGui::DragFloat("Drag", &f, 0.01f, 0.0f, 1.0f);
+    VanGui::DragInt("Drag Int", &i, 1, 0, 100);
+
+Input text:
+    static char buf[256] = "";
+    VanGui::InputText("Input", buf, sizeof(buf));
+    VanGui::InputTextMultiline("##ml", buf, sizeof(buf), VanVec2(-1, 100));
+
+Color picker:
+    static float col[4] = {1,1,1,1};
+    VanGui::ColorEdit4("Color", col);
+    VanGui::ColorEdit3("RGB", col);
+
+Combo box:
+    static int current = 0;
+    const char* items[] = { "Item A", "Item B", "Item C" };
+    VanGui::Combo("Combo", &current, items, IM_ARRAYSIZE(items));
+
+List box:
+    VanGui::ListBox("List", &current, items, IM_ARRAYSIZE(items), 4);
+
+Tree:
+    if (VanGui::TreeNode("Section")) {
+        VanGui::Text("contents");
+        VanGui::TreePop();
+    }
+    if (VanGui::CollapsingHeader("Header")) {
+        VanGui::Text("contents");
+    }
+
+Tabs:
+    if (VanGui::BeginTabBar("##tabs")) {
+        if (VanGui::BeginTabItem("Tab A")) {
+            VanGui::Text("contents of A");
+            VanGui::EndTabItem();
+        }
+        if (VanGui::BeginTabItem("Tab B")) {
+            VanGui::Text("contents of B");
+            VanGui::EndTabItem();
+        }
+        VanGui::EndTabBar();
+    }
+
+Separators / spacing:
+    VanGui::Separator();
+    VanGui::Spacing();
+    VanGui::Dummy(VanVec2(0, 10));    // invisible spacer
+    VanGui::NewLine();
+
+Same-line layout:
+    VanGui::Button("A");
+    VanGui::SameLine();
+    VanGui::Button("B");
+    VanGui::SameLine(200.0f);        // explicit X position
+    VanGui::Button("C");
+
+Indent:
+    VanGui::Indent(20.0f);
+    VanGui::Text("indented");
+    VanGui::Unindent(20.0f);
+
+Tooltip:
+    VanGui::Text("Hover me");
+    if (VanGui::IsItemHovered())
+        VanGui::SetTooltip("This is a tooltip");
+
+Popup:
+    if (VanGui::Button("Open Popup"))
+        VanGui::OpenPopup("my_popup");
+    if (VanGui::BeginPopup("my_popup")) {
+        VanGui::Text("Popup content");
+        VanGui::EndPopup();
+    }
+
+Modal:
+    if (VanGui::Button("Open Modal"))
+        VanGui::OpenPopup("my_modal");
+    if (VanGui::BeginPopupModal("my_modal", nullptr,
+                                 VanGuiWindowFlags_AlwaysAutoResize)) {
+        VanGui::Text("Modal content");
+        if (VanGui::Button("OK")) VanGui::CloseCurrentPopup();
+        VanGui::EndPopup();
+    }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.10  TABLE API
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    if (VanGui::BeginTable("##tbl", 3,
+            VanGuiTableFlags_Borders |
+            VanGuiTableFlags_RowBg   |
+            VanGuiTableFlags_Resizable))
+    {
+        VanGui::TableSetupColumn("Name");
+        VanGui::TableSetupColumn("Value");
+        VanGui::TableSetupColumn("Status");
+        VanGui::TableHeadersRow();
+
+        for (int row = 0; row < 5; row++) {
+            VanGui::TableNextRow();
+            VanGui::TableSetColumnIndex(0); VanGui::Text("Item %d", row);
+            VanGui::TableSetColumnIndex(1); VanGui::Text("%.2f", row * 1.1f);
+            VanGui::TableSetColumnIndex(2); VanGui::Text("OK");
+        }
+        VanGui::EndTable();
+    }
+
+VanGuiTableFlags values (common):
+    VanGuiTableFlags_None
+    VanGuiTableFlags_Resizable
+    VanGuiTableFlags_Reorderable
+    VanGuiTableFlags_Hideable
+    VanGuiTableFlags_Sortable
+    VanGuiTableFlags_BordersInner
+    VanGuiTableFlags_BordersOuter
+    VanGuiTableFlags_Borders         (= Inner | Outer)
+    VanGuiTableFlags_RowBg
+    VanGuiTableFlags_ScrollX
+    VanGuiTableFlags_ScrollY
+    VanGuiTableFlags_SizingFixedFit
+    VanGuiTableFlags_SizingStretchSame
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.11  DRAW LIST (DIRECT 2D RENDERING)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    VanDrawList* draw = VanGui::GetWindowDrawList();
+    VanDrawList* bg   = VanGui::GetBackgroundDrawList();  // behind all windows
+    VanDrawList* fg   = VanGui::GetForegroundDrawList();  // in front of all windows
+
+Positions are in screen space (pixels from top-left of display).
+
+    // Line
+    draw->AddLine(VanVec2(x1,y1), VanVec2(x2,y2), IM_COL32(255,0,0,255), 1.0f);
+
+    // Rectangle
+    draw->AddRect(VanVec2(x1,y1), VanVec2(x2,y2), IM_COL32(255,255,0,255));
+    draw->AddRectFilled(VanVec2(x1,y1), VanVec2(x2,y2), IM_COL32(0,128,0,200));
+    draw->AddRectFilledMultiColor(p_min, p_max, col_tl, col_tr, col_br, col_bl);
+
+    // Circle
+    draw->AddCircle(VanVec2(cx,cy), radius, IM_COL32(255,255,255,255), 32);
+    draw->AddCircleFilled(VanVec2(cx,cy), radius, IM_COL32(255,0,0,200));
+
+    // Triangle
+    draw->AddTriangle(p1, p2, p3, color);
+    draw->AddTriangleFilled(p1, p2, p3, color);
+
+    // Text
+    draw->AddText(VanVec2(x,y), IM_COL32(255,255,255,255), "text");
+    draw->AddText(font, font_size, VanVec2(x,y), color, "text");
+
+    // Convex polygon
+    draw->AddConvexPolyFilled(points, num_points, color);
+
+    // Bezier curves
+    draw->AddBezierCubic(p1, p2, p3, p4, color, thickness);
+    draw->AddBezierQuadratic(p1, p2, p3, color, thickness);
+
+IM_COL32(r, g, b, a) packs RGBA bytes into ImU32.
+Equivalent: VanGui::ColorConvertFloat4ToU32(VanVec4(r,g,b,a)).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.12  FONT MANAGEMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    VanGuiIO& io = VanGui::GetIO();
+
+    // Load font from file (call before first NewFrame):
+    VanFont* font = io.Fonts->AddFontFromFileTTF("path/to/font.ttf", 16.0f);
+
+    // Load font from memory:
+    VanFont* font = io.Fonts->AddFontFromMemoryTTF(data, size, 16.0f);
+
+    // Default built-in font (ProggyClean 13px):
+    VanFont* default_font = io.Fonts->AddFontDefault();
+
+    // Build atlas (done automatically by backend on first NewFrame):
+    io.Fonts->Build();
+
+    // Use a specific font for a block of widgets:
+    VanGui::PushFont(font);
+    VanGui::Text("custom font");
+    VanGui::PopFont();
+
+    // Get texture data for manual GPU upload:
+    unsigned char* pixels;
+    int width, height;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+
+Bundled fonts in misc/fonts/:
+    ProggyClean.ttf    — 13px bitmap, default
+    ProggyTiny.ttf     — 10px bitmap
+    Cousine-Regular.ttf — monospace
+    DroidSans.ttf      — sans-serif
+    Roboto-Medium.ttf  — sans-serif, good for overlays
+    Karla-Regular.ttf  — compact sans-serif
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.13  UTILITY FUNCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Item interaction queries (call immediately after a widget):
+    bool VanGui::IsItemHovered()         — mouse is over last item
+    bool VanGui::IsItemActive()          — last item is being held/edited
+    bool VanGui::IsItemFocused()         — last item has keyboard focus
+    bool VanGui::IsItemClicked(int btn)  — last item was clicked (btn: 0=L,1=R,2=M)
+    bool VanGui::IsItemEdited()          — last item value was changed this frame
+    bool VanGui::IsItemVisible()         — last item is within clipping rect
+
+Window queries:
+    bool VanGui::IsWindowFocused()
+    bool VanGui::IsWindowHovered()
+    VanVec2 VanGui::GetWindowPos()
+    VanVec2 VanGui::GetWindowSize()
+    VanVec2 VanGui::GetContentRegionAvail()
+    VanVec2 VanGui::GetCursorPos()           — relative to window
+    VanVec2 VanGui::GetCursorScreenPos()     — absolute screen position
+
+Mouse / keyboard:
+    bool VanGui::IsMouseClicked(int btn)
+    bool VanGui::IsMouseDown(int btn)
+    bool VanGui::IsMouseReleased(int btn)
+    bool VanGui::IsMouseDoubleClicked(int btn)
+    VanVec2 VanGui::GetMousePos()
+    VanVec2 VanGui::GetMouseDelta()
+    float VanGui::GetMouseWheel()
+    bool VanGui::IsKeyDown(VanGuiKey key)
+    bool VanGui::IsKeyPressed(VanGuiKey key)
+    bool VanGui::IsKeyReleased(VanGuiKey key)
+
+ID stack (disambiguate widgets with same label):
+    VanGui::PushID("section_name");
+    VanGui::PushID(index);
+    VanGui::PopID();
+    // or use ## in labels: "Button##1", "Button##2"
+    // or use ### to override display: "display text###unique_id"
+
+Clipboard:
+    const char* VanGui::GetClipboardText();
+    void VanGui::SetClipboardText(const char* text);
+
+Cursor / layout:
+    VanGui::SetCursorPos(VanVec2 pos);
+    VanGui::SetCursorPosX(float x);
+    VanGui::SetCursorPosY(float y);
+    void VanGui::SetNextItemWidth(float width);
+    void VanGui::PushItemWidth(float width);
+    void VanGui::PopItemWidth();
+
+Color conversion:
+    VanVec4 VanGui::ColorConvertU32ToFloat4(ImU32 in);
+    ImU32   VanGui::ColorConvertFloat4ToU32(VanVec4 in);
+    void    VanGui::ColorConvertRGBtoHSV(float r,g,b, float& h,s,v);
+    void    VanGui::ColorConvertHSVtoRGB(float h,s,v, float& r,g,b);
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.14  FULL OVERLAY EXAMPLE (DX9 + WIN32)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    // overlay.h
+    void Overlay_Init(IDirect3DDevice9* pDevice, HWND hWnd);
+    void Overlay_NewFrame();   // call from Present, inside BeginScene/EndScene
+    void Overlay_PreReset();   // call before IDirect3DDevice9::Reset()
+    void Overlay_PostReset(IDirect3DDevice9* pDevice);  // call after Reset()
+    void Overlay_Shutdown();
+
+    // overlay.cpp
+    #include "vangui.h"
+    #include "vangui_impl_win32.h"
+    #include "vangui_impl_dx9.h"
+    extern VANGUI_IMPL_API LRESULT
+        VanGui_ImplWin32_WndProcHandler(HWND,UINT,WPARAM,LPARAM);
+
+    static WNDPROC g_origProc = nullptr;
+    static bool    g_open     = true;
+
+    static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+        if (VanGui_ImplWin32_WndProcHandler(h, m, w, l)) return TRUE;
+        VanGuiIO& io = VanGui::GetIO();
+        if (io.WantCaptureMouse) {
+            switch (m) {
+            case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_RBUTTONDOWN:
+            case WM_RBUTTONUP:   case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+            case WM_MOUSEWHEEL:  case WM_MOUSEMOVE:
+                return 0;
+            }
+        }
+        if (io.WantCaptureKeyboard) {
+            switch (m) {
+            case WM_KEYDOWN: case WM_KEYUP: case WM_CHAR:
+                return 0;
+            }
+        }
+        return CallWindowProcW(g_origProc, h, m, w, l);
+    }
+
+    void Overlay_Init(IDirect3DDevice9* pDevice, HWND hWnd) {
+        VANGUI_CHECKVERSION();
+        VanGui::CreateContext();
+        VanGuiIO& io = VanGui::GetIO();
+        io.ConfigFlags |= VanGuiConfigFlags_NavEnableKeyboard;
+        io.IniFilename = nullptr;
+        VanGui::StyleColorsDark();
+        VanGuiStyle& style = VanGui::GetStyle();
+        style.WindowRounding = 6.0f;
+        style.FrameRounding  = 4.0f;
+        style.Colors[VanGuiCol_WindowBg] = VanVec4(0.08f, 0.08f, 0.10f, 0.95f);
+        VanGui_ImplWin32_Init(hWnd);
+        VanGui_ImplDX9_Init(pDevice);
+        VanGui_ImplDX9_CreateDeviceObjects();
+        g_origProc = reinterpret_cast<WNDPROC>(
+            GetWindowLongPtrW(hWnd, GWLP_WNDPROC));
+        SetWindowLongPtrW(hWnd, GWLP_WNDPROC,
+            reinterpret_cast<LONG_PTR>(WndProc));
+    }
+
+    void Overlay_NewFrame() {
+        VanGui_ImplDX9_NewFrame();
+        VanGui_ImplWin32_NewFrame();
+        VanGui::NewFrame();
+
+        if (g_open) {
+            VanGui::Begin("Overlay", &g_open);
+            VanGui::Text("Frame: %d", VanGui::GetFrameCount());
+            static float f = 1.0f;
+            VanGui::SliderFloat("Value", &f, 0.0f, 2.0f);
+            if (VanGui::BeginTabBar("##tabs")) {
+                if (VanGui::BeginTabItem("Tab A")) {
+                    VanGui::Text("Content A");
+                    VanGui::EndTabItem();
+                }
+                if (VanGui::BeginTabItem("Tab B")) {
+                    VanGui::Text("Content B");
+                    VanGui::EndTabItem();
+                }
+                VanGui::EndTabBar();
+            }
+            VanGui::End();
+        }
+
+        VanGui::Render();
+        VanGui_ImplDX9_RenderDrawData(VanGui::GetDrawData());
+    }
+
+    void Overlay_PreReset() {
+        VanGui_ImplDX9_InvalidateDeviceObjects();
+    }
+
+    void Overlay_PostReset(IDirect3DDevice9* pDevice) {
+        VanGui_ImplDX9_CreateDeviceObjects();
+    }
+
+    void Overlay_Shutdown() {
+        VanGui_ImplDX9_Shutdown();
+        VanGui_ImplWin32_Shutdown();
+        VanGui::DestroyContext();
+    }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.15  DEFERRED WIN32 BACKEND INIT PATTERN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If the game HWND is not yet known at Init() time:
+
+    static bool g_win32BackendReady = false;
+
+    // In Init():
+    VanGui_ImplDX9_Init(pDevice);
+    VanGui_ImplDX9_CreateDeviceObjects();
+    if (hWnd) {
+        VanGui_ImplWin32_Init(hWnd);
+        g_win32BackendReady = true;
+    }
+    // else: defer — NewFrame() will retry
+
+    // In NewFrame() / RenderFrame(), before NewFrame call:
+    if (!g_win32BackendReady) {
+        HWND hWnd = /* resolve via GetCreationParameters or GetForegroundWindow */;
+        if (hWnd) {
+            VanGui_ImplWin32_Init(hWnd);
+            g_win32BackendReady = true;
+            // also install WndProc subclass here
+        } else {
+            return;  // skip this frame — window not yet available
+        }
+    }
+
+    // DisplaySize guard — window may be minimized:
+    RECT rc{};
+    if (!GetClientRect(hWnd, &rc) ||
+        (rc.right - rc.left) <= 0 ||
+        (rc.bottom - rc.top) <= 0)
+        return;  // skip frame — zero-area window causes assert in NewFrame
+
+    // Shutdown: only call ImplWin32_Shutdown if g_win32BackendReady is true
+    if (g_win32BackendReady) {
+        VanGui_ImplWin32_Shutdown();
+        g_win32BackendReady = false;
+    }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.16  MULTIPLE BEGINSCENE/ENDSCENE PAIRS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Some games issue multiple BeginScene/EndScene pairs per Present (world pass,
+HUD pass, UI pass). VanGUI rendering must happen inside its own dedicated
+BeginScene/EndScene pair called immediately before the Present() flip:
+
+    HRESULT hk_Present(...) {
+        // Open our own scene for the overlay draw.
+        // We are outside all of the game's Begin/End pairs at this point.
+        if (SUCCEEDED(pDevice->BeginScene())) {
+            Overlay_NewFrame();      // NewFrame + Render + RenderDrawData
+            pDevice->EndScene();
+        }
+        return orig_Present(...);
+    }
+
+Do NOT render inside the game's BeginScene/EndScene callbacks — you have no
+guarantee they will be followed by a Present on that frame.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.17  RESET / HOT-DEVICE-SWAP RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CORRECT Reset handling:
+    Before Reset : VanGui_ImplDX9_InvalidateDeviceObjects()
+    After Reset  : VanGui_ImplDX9_CreateDeviceObjects()
+
+WRONG — causes crashes:
+    Before Reset : VanGui_ImplDX9_Shutdown() + VanGui::DestroyContext()
+    After Reset  : VANGUI_CHECKVERSION() + VanGui::CreateContext() + full Init()
+
+Full Shutdown/Init on Reset is wrong because:
+  - DestroyContext tears down state still referenced by an in-flight Present
+  - CreateContext + Init re-registers backends that are already alive
+  - The WndProc subclass gets double-installed, overwriting the saved original
+  - The result is double-initialization and a guaranteed crash
+
+Invalidate releases only D3DPOOL_DEFAULT resources (render targets, textures)
+that D3D9 requires to be released before Reset. The context, font atlas, Win32
+backend, and WndProc subclass are left completely untouched.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2.18  TESTCOOPERATIVELEVEL — DO NOT USE AS RENDER GATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Some tutorials gate rendering on TestCooperativeLevel() == D3D_OK.
+Do NOT do this for overlay rendering. Some games' GPU subprocesses (e.g. CEF)
+cause TestCooperativeLevel to return D3DERR_DEVICENOTRESET for sustained periods
+even when the device is fully functional for rendering.
+
+Correct gate: attempt BeginScene and check its HRESULT.
+    if (SUCCEEDED(pDevice->BeginScene())) {
+        // safe to render
+        RenderOverlay(pDevice);
+        pDevice->EndScene();
+    }
+    // D3DERR_DEVICELOST from BeginScene = genuinely unusable, skip frame silently
+
+────────────────────────────────────────────────────────────────────────────────
+PART 3 — COMBINED USAGE PATTERNS
+────────────────────────────────────────────────────────────────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.1  DX9 DEVICE PROXY + VANGUI OVERLAY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The canonical pattern for a D3D9 overlay using a COM device proxy and VanGUI:
+
+1. Hook IDirect3D9::CreateDevice via VanHooks vtable hook on slot 15.
+2. In the hook, call original CreateDevice, wrap result in a proxy class.
+3. Proxy class overrides Present() — on first call, init VanGUI, then
+   install any remaining hooks with thread_safe=false.
+4. Present() calls BeginScene, renders VanGUI, calls EndScene, forwards
+   to original Present.
+5. Proxy class overrides Reset() — calls InvalidateDeviceObjects before,
+   CreateDeviceObjects after.
+
+VanHooks vtable hook replaces the manual PatchCreateDeviceVtable() pattern:
+
+    // OLD (MinHook / manual):
+    void** vtbl = *reinterpret_cast<void***>(pTmp);
+    VirtualProtect(&vtbl[15], sizeof(void*), PAGE_READWRITE, &old);
+    _InterlockedExchangePointer(&vtbl[15], &Hooked_CreateDevice);
+    VirtualProtect(&vtbl[15], sizeof(void*), old, &old);
+
+    // NEW (VanHooks):
+    auto r = eng.hook_vtable(
+        (void*)&Hooked_CreateDevice,
+        vanhooks::VTableOptions{ .vtable = vtbl, .slot_index = 15,
+                                  .tag = "CreateDevice" });
+
+VanHooks handles VirtualProtect, atomic write, and restoration automatically.
+The hook is tracked in the registry and restored by eng.remove_all() or
+the Engine destructor.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.2  DLLMAIN INIT PATTERN (NO MINIT STUB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+With MinHook, dllmain needed:
+    MH_Initialize();   // required
+    // ... later ...
+    MH_Uninitialize();
+
+With VanHooks, neither call is needed. global_engine() is a function-local
+static, initialized on first use. The Engine destructor (called at process
+exit or DLL unload) calls remove_all() automatically.
+
+DLL_PROCESS_ATTACH needs only:
+    - Load real System32 DLLs (dinput8.dll, version.dll)
+    - Hook IDirect3D9::CreateDevice via vtable
+    No MH_Initialize, no MH_Uninitialize.
+
+DLL_PROCESS_DETACH needs only:
+    - Shutdown CfCore (which calls remove_all() and VanGUI shutdown)
+    - FreeLibrary for real DLLs
+    No MH_DisableHook, no MH_Uninitialize.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.3  SUBSYSTEM HOOK INSTALLATION PATTERN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For subsystems that need to install their own hooks (additional functions
+beyond the D3D9 device), the correct pattern is to install from the first
+Present() frame using thread_safe=false:
+
+    void MySubsystem::Init(IDirect3DDevice9* pDevice) {
+        // called from CfCore::Init(), which is called from first Present()
+        // Main thread is inside Present — safe for thread_safe=false
+
+        vanhooks::TrampolineOptions opts;
+        opts.thread_safe = false;
+        opts.tag = "MySubsystem::SomeFunction";
+
+        auto r = vanhooks::global_engine().hook_api(
+            "some_module.dll", "SomeFunction",
+            (void*)&hk_SomeFunction,
+            (void**)&orig_SomeFunction,
+            opts);
+
+        if (!r)
+            CF_WARN("MySubsystem", "hook_api failed: %s",
+                vanhooks::error_to_string(r.error()).data());
+        else
+            m_hookHandle = *r;
+    }
+
+    void MySubsystem::Shutdown() {
+        if (m_hookHandle.valid())
+            vanhooks::global_engine().remove(m_hookHandle);
+    }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.4  VANGUI NAMESPACE / IDENTIFIER QUICK REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When porting code from ImGui to VanGUI, apply these substitutions:
+
+    ImGui::         → VanGui::
+    ImGuiIO         → VanGuiIO
+    ImGuiStyle      → VanGuiStyle
+    ImGuiContext    → VanGuiContext
+    ImVec2          → VanVec2
+    ImVec4          → VanVec4
+    ImDrawList      → VanDrawList
+    ImFont          → VanFont
+    ImFontAtlas     → VanFontAtlas
+    ImTextureID     → VanTextureID
+    ImGuiCol_       → VanGuiCol_
+    ImGuiCond_      → VanGuiCond_
+    ImGuiDir_       → VanGuiDir_
+    ImGuiKey_       → VanGuiKey_
+    ImGuiWindowFlags_ → VanGuiWindowFlags_
+    ImGuiTableFlags_  → VanGuiTableFlags_
+    ImGuiTableColumnFlags_ → VanGuiTableColumnFlags_
+    ImGuiSelectableFlags_  → VanGuiSelectableFlags_
+    ImGuiComboFlags_       → VanGuiComboFlags_
+    ImGuiInputTextFlags_   → VanGuiInputTextFlags_
+    ImGuiTreeNodeFlags_    → VanGuiTreeNodeFlags_
+    ImGuiPopupFlags_       → VanGuiPopupFlags_
+    ImGuiHoveredFlags_     → VanGuiHoveredFlags_
+    ImGuiFocusedFlags_     → VanGuiFocusedFlags_
+    ImGuiConfigFlags_      → VanGuiConfigFlags_
+    ImGuiColorEditFlags_   → VanGuiColorEditFlags_
+    ImGuiSliderFlags_      → VanGuiSliderFlags_
+    ImGuiDragDropFlags_    → VanGuiDragDropFlags_
+    IMGUI_CHECKVERSION()   → VANGUI_CHECKVERSION()
+    IMGUI_IMPL_API         → VANGUI_IMPL_API
+    IM_ARRAYSIZE           → VAN_ARRAYSIZE  (or keep IM_ARRAYSIZE, same macro)
+    IM_COL32               → IM_COL32  (unchanged — internal macro)
+    imgui_impl_dx9.h       → vangui_impl_dx9.h
+    imgui_impl_win32.h     → vangui_impl_win32.h
+    imgui_impl_dx11.h      → vangui_impl_dx11.h
+    imgui_impl_vulkan.h    → vangui_impl_vulkan.h
+    ImGui_ImplDX9_Init     → VanGui_ImplDX9_Init
+    ImGui_ImplDX9_Shutdown → VanGui_ImplDX9_Shutdown
+    ImGui_ImplDX9_NewFrame → VanGui_ImplDX9_NewFrame
+    ImGui_ImplDX9_RenderDrawData → VanGui_ImplDX9_RenderDrawData
+    ImGui_ImplDX9_InvalidateDeviceObjects → VanGui_ImplDX9_InvalidateDeviceObjects
+    ImGui_ImplDX9_CreateDeviceObjects     → VanGui_ImplDX9_CreateDeviceObjects
+    ImGui_ImplWin32_Init       → VanGui_ImplWin32_Init
+    ImGui_ImplWin32_Shutdown   → VanGui_ImplWin32_Shutdown
+    ImGui_ImplWin32_NewFrame   → VanGui_ImplWin32_NewFrame
+    ImGui_ImplWin32_WndProcHandler → VanGui_ImplWin32_WndProcHandler
+    ImGui_ImplWin32_EnableDpiAwareness → VanGui_ImplWin32_EnableDpiAwareness
+
+────────────────────────────────────────────────────────────────────────────────
+END OF SKILL DOCUMENT
+================================================================================

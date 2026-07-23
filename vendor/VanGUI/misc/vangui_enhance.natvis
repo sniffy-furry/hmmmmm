@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug visualizers for the VanGUI enhancement suite (MSVC / VS debugger).
+     Add to your project's natvis files (or VS will auto-load if next to the PDB). -->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!-- Signals -->
+  <Type Name="VanGui::VanSignal&lt;*&gt;">
+    <DisplayString Condition="impl_._Ptr == 0">VanSignal (empty)</DisplayString>
+    <DisplayString>VanSignal slots={impl_._Ptr->slots._Mypair._Myval2._Mylast - impl_._Ptr->slots._Mypair._Myval2._Myfirst}</DisplayString>
+    <Expand>
+      <Item Name="[slots]">impl_._Ptr->slots</Item>
+    </Expand>
+  </Type>
+  <Type Name="VanGui::VanConnection">
+    <DisplayString Condition="connected_">VanConnection (live)</DisplayString>
+    <DisplayString>VanConnection (disconnected)</DisplayString>
+  </Type>
+
+  <!-- Undo -->
+  <Type Name="VanGui::VanUndoStack&lt;*&gt;">
+    <DisplayString>UndoStack undo={past_._Mypair._Myval2._Mylast - past_._Mypair._Myval2._Myfirst} redo={future_._Mypair._Myval2._Mylast - future_._Mypair._Myval2._Myfirst}</DisplayString>
+    <Expand>
+      <Item Name="[undo]">past_</Item>
+      <Item Name="[redo]">future_</Item>
+    </Expand>
+  </Type>
+  <Type Name="VanGui::VanCommandStack">
+    <DisplayString>CommandStack undo={past_._Mypair._Myval2._Mylast - past_._Mypair._Myval2._Myfirst} redo={future_._Mypair._Myval2._Mylast - future_._Mypair._Myval2._Myfirst}</DisplayString>
+  </Type>
+
+  <!-- Settings -->
+  <Type Name="VanGui::VanSettings">
+    <DisplayString>VanSettings keys={kv_._Mypair._Myval2._Mylast - kv_._Mypair._Myval2._Myfirst} binds={binds_._Mypair._Myval2._Mylast - binds_._Mypair._Myval2._Myfirst}</DisplayString>
+    <Expand>
+      <Item Name="[entries]">kv_</Item>
+      <Item Name="[bindings]">binds_</Item>
+    </Expand>
+  </Type>
+
+  <!-- Animation params -->
+  <Type Name="VanGui::Anim::VanAnimParams">
+    <DisplayString>Anim dur={Duration}s ease={Easing} delay={Delay}s</DisplayString>
+  </Type>
+  <Type Name="VanGui::Anim::VanSpringParams">
+    <DisplayString>Spring k={Stiffness} c={Damping}</DisplayString>
+  </Type>
+
+  <!-- Reflector field proxies -->
+  <Type Name="VanGui::detail::FieldBase">
+    <DisplayString>field "{label,s}"</DisplayString>
+  </Type>
+</AutoVisualizer>

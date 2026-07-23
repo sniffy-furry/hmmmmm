@@ -1,0 +1,12 @@
+// NFSMWToolkit embedded resources.
+// appicon.png and mouse.png are baked into the .exe at compile time via RCDATA.
+// appicon.ico is used as the Windows shell/taskbar icon (ICON resource type).
+// Users never receive or interact with these source files directly.
+
+// Windows Explorer / taskbar / Alt+Tab icon (requires native ICON resource type).
+// The ICO wraps the same PNG bytes; Windows scales it to 16/32/48 px as needed.
+1000 ICON "appicon.ico"
+
+// Runtime RGBA blobs decoded by WIC for glfwSetWindowIcon / glfwCreateCursor.
+1 RCDATA "appicon.png"
+2 RCDATA "mouse.png"

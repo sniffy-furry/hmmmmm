@@ -1,0 +1,499 @@
+
+Graphics Engine Bible 2026
+Volume II — Rendering Systems & Physically Based Rendering
+
+Chapter 3: Forward+ and Clustered Rendering
+
+=====================================================================
+3.1 Introduction
+=====================================================================
+
+Forward+ and Clustered Rendering represent the evolution of traditional
+forward rendering. These techniques solve one of the largest problems
+in real-time graphics:
+
+    Efficiently rendering scenes containing hundreds or thousands
+    of dynamic lights.
+
+Traditional forward rendering scales poorly because every object must
+evaluate every light affecting it.
+
+Forward+ and Clustered Rendering solve this problem through intelligent
+light culling and GPU-driven light management.
+
+=====================================================================
+3.2 Traditional Forward Rendering
+=====================================================================
+
+Classic forward rendering operates as follows:
+
+For each object:
+    For each light:
+        Evaluate lighting
+
+Complexity:
+
+    O(Objects × Lights)
+
+As light counts increase, performance rapidly degrades.
+
+Example:
+
+1000 Objects
+500 Lights
+
+Potential evaluations:
+
+500,000 lighting operations
+
+This becomes unsustainable for modern scenes.
+
+=====================================================================
+3.3 Evolution Toward Forward+
+=====================================================================
+
+Forward+ introduces screen-space light culling.
+
+Instead of evaluating all lights:
+
+1. Divide screen into tiles
+2. Determine which lights affect each tile
+3. Evaluate only relevant lights
+
+Result:
+
+Massive reduction in lighting calculations.
+
+=====================================================================
+3.4 Forward+ Architecture
+=====================================================================
+
+Pipeline:
+
+Depth Prepass
+      |
+      V
+Build Tile Light Lists
+      |
+      V
+Forward Lighting Pass
+      |
+      V
+Post Processing
+
+The GPU first determines which lights influence each region of the
+screen before shading begins.
+
+=====================================================================
+3.5 Tile-Based Rendering
+=====================================================================
+
+The screen is divided into small rectangular regions.
+
+Common sizes:
+
+8x8 pixels
+16x16 pixels
+32x32 pixels
+
+Example:
+
+1920 x 1080 resolution
+
+Using 16x16 tiles:
+
+120 × 68 tiles
+
+Total:
+
+8160 tiles
+
+Each tile maintains its own light list.
+
+=====================================================================
+3.6 Tile Frustums
+=====================================================================
+
+Each tile corresponds to a frustum in view space.
+
+These frustums are used to determine which lights intersect the tile.
+
+Simplified workflow:
+
+Create tile frustum
+Test all lights
+Store intersecting lights
+
+The resulting list is significantly smaller than the total scene light
+count.
+
+=====================================================================
+3.7 Compute Shader Light Culling
+=====================================================================
+
+Modern implementations use compute shaders.
+
+Workflow:
+
+Dispatch Compute Shader
+Generate Tile Frustums
+Cull Lights
+Store Light Indices
+
+Benefits:
+
+- Massive parallelism
+- Reduced CPU workload
+- Better scalability
+
+Example data structure:
+
+struct TileLightList
+{
+    uint Count;
+    uint LightIndices[256];
+};
+
+=====================================================================
+3.8 Light Bounding Volumes
+=====================================================================
+
+Lights are represented by bounding volumes.
+
+Point Light:
+    Sphere
+
+Spot Light:
+    Cone
+
+Area Light:
+    Box or custom volume
+
+Testing becomes:
+
+Light intersects tile?
+
+If true:
+
+Add light index to tile list.
+
+=====================================================================
+3.9 Depth-Aware Forward+
+=====================================================================
+
+Basic Forward+ uses only screen-space dimensions.
+
+Problem:
+
+Large depth ranges create inefficient light lists.
+
+Example:
+
+Foreground object
+Background mountain
+
+Same tile
+Very different depths
+
+Solution:
+
+Depth-aware partitioning.
+
+=====================================================================
+3.10 Motivation for Clustered Rendering
+=====================================================================
+
+Clustered Rendering extends Forward+ into 3D space.
+
+Instead of:
+
+Tile(X,Y)
+
+We use:
+
+Cluster(X,Y,Z)
+
+This dramatically improves light assignment precision.
+
+=====================================================================
+3.11 Cluster Construction
+=====================================================================
+
+Clusters divide view space into:
+
+Width
+Height
+Depth
+
+Example:
+
+120 x 68 x 24
+
+Clusters:
+
+195,840
+
+Each cluster stores:
+
+- Light references
+- Reflection probes
+- Decals
+- Volumetric data
+
+=====================================================================
+3.12 Depth Slicing
+=====================================================================
+
+Depth slicing is critical.
+
+Linear slicing:
+
+Simple
+Poor distribution
+
+Logarithmic slicing:
+
+Preferred
+More precision near camera
+
+Common formula:
+
+Slice = log(depth)
+
+Advantages:
+
+Better utilization
+Improved culling
+Reduced overdraw
+
+=====================================================================
+3.13 Cluster Generation Pipeline
+=====================================================================
+
+Step 1:
+Build cluster grid
+
+Step 2:
+Generate bounding volumes
+
+Step 3:
+Cull lights
+
+Step 4:
+Store cluster light lists
+
+Step 5:
+Render scene
+
+All steps can be GPU-driven.
+
+=====================================================================
+3.14 GPU Data Structures
+=====================================================================
+
+Typical cluster data:
+
+struct Cluster
+{
+    uint Offset;
+    uint Count;
+};
+
+struct LightIndex
+{
+    uint Index;
+};
+
+Benefits:
+
+Compact memory usage
+Cache-friendly access
+Fast traversal
+
+=====================================================================
+3.15 Memory Considerations
+=====================================================================
+
+Clustered rendering trades memory for performance.
+
+Resources include:
+
+Cluster Buffers
+Light Lists
+Index Buffers
+Visibility Data
+
+Optimization strategies:
+
+Compression
+Sparse allocation
+Dynamic resizing
+
+=====================================================================
+3.16 Forward+ vs Deferred Rendering
+=====================================================================
+
+Forward+ Advantages:
+
+- Better MSAA support
+- Transparency compatibility
+- Lower memory consumption
+- Simpler material evaluation
+
+Deferred Advantages:
+
+- Flexible G-buffer workflows
+- Screen-space effect integration
+- Consistent material storage
+
+Choice depends on engine requirements.
+
+=====================================================================
+3.17 Forward+ vs Clustered Rendering
+=====================================================================
+
+Forward+
+
+Advantages:
+- Simpler implementation
+- Lower memory cost
+
+Disadvantages:
+- Less precise culling
+
+Clustered
+
+Advantages:
+- Better scalability
+- Improved depth precision
+- Volumetric compatibility
+
+Disadvantages:
+- Increased complexity
+
+=====================================================================
+3.18 Transparency Rendering
+=====================================================================
+
+Forward+ excels at transparency.
+
+Examples:
+
+Glass
+Particles
+Smoke
+Hair
+Water
+
+Because shading occurs directly during rasterization, transparency
+integration is significantly easier than in deferred pipelines.
+
+=====================================================================
+3.19 Volumetric Rendering Integration
+=====================================================================
+
+Clustered systems naturally support volumetrics.
+
+Data stored per cluster:
+
+Fog density
+Participating media
+Scattering coefficients
+
+Applications:
+
+Volumetric fog
+Cloud rendering
+Atmospheric effects
+
+=====================================================================
+3.20 Reflection Probe Management
+=====================================================================
+
+Clusters can store reflection probe references.
+
+Benefits:
+
+Efficient lookup
+Reduced probe searches
+Improved cache locality
+
+Common in large open-world engines.
+
+=====================================================================
+3.21 GPU-Driven Rendering
+=====================================================================
+
+Modern engines increasingly adopt GPU-driven workflows.
+
+Examples:
+
+Indirect Draws
+Mesh Shaders
+Task Shaders
+GPU Visibility Systems
+
+Clustered rendering integrates naturally with these architectures.
+
+=====================================================================
+3.22 Production Engine Usage
+=====================================================================
+
+Many modern engines employ variations of:
+
+Forward+
+Clustered Forward
+Clustered Deferred
+Hybrid Renderers
+
+Reasons:
+
+Scalability
+Memory efficiency
+Compatibility with modern hardware
+
+=====================================================================
+3.23 Optimization Strategies
+=====================================================================
+
+Recommendations:
+
+Use logarithmic depth slicing.
+Cull lights on GPU.
+Compress cluster data.
+Minimize memory bandwidth.
+Reuse visibility results.
+Profile cluster occupancy.
+
+Avoid excessive cluster counts that waste memory and cache resources.
+
+=====================================================================
+3.24 Future Directions
+=====================================================================
+
+Forward+ and Clustered Rendering continue evolving alongside:
+
+Mesh Shaders
+Ray Tracing
+Neural Rendering
+GPU-Driven Pipelines
+
+Future renderers will likely combine:
+
+Clustered Lighting
+Ray-Traced Effects
+Temporal Reconstruction
+Machine Learning Acceleration
+
+=====================================================================
+3.25 Summary
+=====================================================================
+
+Forward+ and Clustered Rendering represent some of the most important
+advances in real-time rendering architecture.
+
+By intelligently culling lights and organizing scene data, these
+systems enable modern engines to render massive worlds with thousands
+of dynamic light sources while maintaining real-time performance.
+
+End of Chapter 3.

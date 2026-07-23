@@ -1,0 +1,284 @@
+
+Graphics Engine Bible 2026
+DX9-Compatible Implementation Guide
+
+=====================================================================
+Introduction
+=====================================================================
+
+This document focuses specifically on implementing modern rendering
+concepts within the constraints of DirectX 9 and Shader Model 3.0.
+
+The goal is not to replicate DX12 feature-for-feature, but to adapt
+modern rendering techniques to legacy engines and injectors.
+
+Target Engines:
+
+- Drift City
+- GTA San Andreas
+- Prism3D-based titles
+- Gamebryo DX9 projects
+- Custom MMO engines
+- Proprietary DX9 renderers
+
+=====================================================================
+1. Deferred Rendering in DX9
+=====================================================================
+
+Recommended Pipeline
+
+Geometry Pass
+↓
+G-Buffer Generation
+↓
+Light Accumulation
+↓
+HDR Composition
+↓
+Post Processing
+↓
+Present
+
+Suggested MRT Layout
+
+RT0:
+Albedo.rgb
+Specular.a
+
+RT1:
+Normal.xy
+Roughness.a
+
+RT2:
+Material Flags
+Ambient Occlusion
+Custom Data
+
+Depth:
+D24S8
+
+=====================================================================
+2. DX9 HDR Pipeline
+=====================================================================
+
+Scene
+↓
+FP16 HDR Buffer
+↓
+Bloom
+↓
+Tone Mapping
+↓
+LUT Color Grading
+↓
+Sharpen
+↓
+Present
+
+Recommended Formats
+
+A16B16G16R16F
+A8R8G8B8
+R5G6B5 (fallback)
+
+=====================================================================
+3. Shadow System
+=====================================================================
+
+Recommended:
+
+- Cascaded Shadow Maps
+- PCF Filtering
+- Variance Shadow Maps
+
+Performance Settings
+
+1024x1024 shadows:
+Low-end systems
+
+2048x2048 shadows:
+Mid-range systems
+
+4096x4096 shadows:
+High-end DX9 hardware
+
+=====================================================================
+4. Ambient Occlusion
+=====================================================================
+
+Recommended Techniques
+
+SSAO
+HBAO-inspired approximation
+
+Half-resolution rendering recommended.
+
+Pipeline
+
+Depth Buffer
+↓
+Normal Buffer
+↓
+AO Generation
+↓
+Bilateral Blur
+↓
+Composite
+
+=====================================================================
+5. Screen Space Reflections
+=====================================================================
+
+DX9-Compatible Approximation
+
+Reflection Ray
+↓
+Depth Marching
+↓
+Hit Detection
+↓
+Blur
+↓
+Composite
+
+Recommendations
+
+- Half resolution
+- Limited ray distance
+- Temporal accumulation
+
+=====================================================================
+6. Forward+ Approximation
+=====================================================================
+
+True Forward+ requires compute shaders.
+
+DX9 Alternative
+
+CPU Visibility System
+↓
+Tile Generation
+↓
+Upload Light Lists
+↓
+Shader Evaluation
+
+Tile Size
+
+16x16 pixels
+
+Suitable for:
+
+100–300 dynamic lights
+
+=====================================================================
+7. Volumetric Fog
+=====================================================================
+
+Low-Cost Approach
+
+Depth-Based Raymarching
+
+Scene Depth
+↓
+Fog Density
+↓
+Light Scattering
+↓
+Composite
+
+Recommended Steps
+
+16–32 raymarch steps
+
+=====================================================================
+8. ENB-Style Injector Integration
+=====================================================================
+
+Hook Locations
+
+IDirect3DDevice9::Present
+IDirect3DDevice9::EndScene
+IDirect3DDevice9::Reset
+
+Pipeline
+
+Capture Backbuffer
+↓
+HDR
+↓
+Bloom
+↓
+AO
+↓
+SSR
+↓
+Color Grading
+↓
+Present
+
+=====================================================================
+9. HLSL Example
+=====================================================================
+
+float3 ApplySimpleLighting(
+    float3 normal,
+    float3 lightDir,
+    float3 lightColor)
+{
+    float NdotL =
+        saturate(dot(normal, lightDir));
+
+    return lightColor * NdotL;
+}
+
+=====================================================================
+10. Optimization Checklist
+=====================================================================
+
+✓ Minimize render targets
+
+✓ Compress normals
+
+✓ Batch draw calls
+
+✓ Reduce state changes
+
+✓ Use stencil light volumes
+
+✓ Use half-resolution effects
+
+✓ Limit expensive shader branches
+
+✓ Profile GPU bandwidth
+
+✓ Reuse depth buffers
+
+✓ Cache material states
+
+=====================================================================
+11. Modernization Roadmap
+=====================================================================
+
+Stage 1
+HDR + Bloom
+
+Stage 2
+SSAO + Shadows
+
+Stage 3
+Deferred Lighting
+
+Stage 4
+SSR + Volumetrics
+
+Stage 5
+PBR Approximation
+
+Stage 6
+Temporal Reconstruction
+
+This staged approach is recommended for upgrading legacy DX9 engines
+without destabilizing the renderer.
+
+End of DX9-Compatible Implementation Guide.

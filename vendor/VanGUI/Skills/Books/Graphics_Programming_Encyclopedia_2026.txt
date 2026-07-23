@@ -1,0 +1,481 @@
+
+GRAPHICS PROGRAMMING ENCYCLOPEDIA 2026
+======================================
+
+TABLE OF CONTENTS
+=================
+1. Rendering Pipelines
+2. DirectX Architecture
+3. HLSL Shader Types
+4. Lighting Systems
+5. Shadow Systems
+6. Physically Based Rendering
+7. Global Illumination
+8. Ambient Occlusion
+9. Reflection Systems
+10. Refraction Systems
+11. Water Rendering
+12. Atmospheric Rendering
+13. Volumetrics
+14. Terrain Rendering
+15. Vegetation Rendering
+16. Character Rendering
+17. Post Processing
+18. Anti-Aliasing
+19. Upscaling Technologies
+20. Particle Systems
+21. World Streaming
+22. Culling Systems
+23. Weather Systems
+24. Vehicle Rendering
+25. Deferred Rendering
+26. Forward Rendering
+27. Clustered Rendering
+28. Ray Tracing
+29. Path Tracing
+30. DirectX 9 Injector Architecture
+31. ENB and ReShade Concepts
+32. Prism3D Considerations
+33. Optimization Techniques
+34. Memory Management
+35. Modern Engine Features
+36. Future Rendering Research
+
+SECTION 1 - RENDERING PIPELINES
+===============================
+Forward Rendering
+Deferred Rendering
+Forward+ Rendering
+Clustered Rendering
+Tiled Rendering
+Hybrid Rendering
+Software Rendering
+Rasterization
+Ray Tracing
+Path Tracing
+Photon Tracing
+Voxel Rendering
+
+SECTION 2 - DIRECTX ARCHITECTURE
+================================
+DirectX 9
+DirectX 10
+DirectX 11
+DirectX 12
+Command Queues
+Swap Chains
+Render Targets
+Depth Buffers
+Stencil Buffers
+State Objects
+Descriptor Heaps
+Resource Views
+Pipeline State Objects
+
+SECTION 3 - HLSL SHADERS
+========================
+Vertex Shaders
+Pixel Shaders
+Geometry Shaders
+Hull Shaders
+Domain Shaders
+Compute Shaders
+
+Shader Techniques
+-----------------
+Normal Mapping
+Parallax Mapping
+Parallax Occlusion Mapping
+Relief Mapping
+Displacement Mapping
+Tessellation
+Triplanar Mapping
+Virtual Texturing
+Texture Arrays
+Cube Mapping
+Environment Mapping
+Light Mapping
+Shadow Mapping
+
+SECTION 4 - LIGHTING
+====================
+Ambient Lighting
+Directional Lighting
+Point Lights
+Spot Lights
+Area Lights
+Tube Lights
+Disc Lights
+
+Advanced Lighting
+-----------------
+PBR Lighting
+IBL Lighting
+SSGI
+Voxel GI
+Radiance Cascades
+Probe Lighting
+Light Propagation Volumes
+Photon Mapping
+Light Field Systems
+
+SECTION 5 - SHADOWS
+===================
+Shadow Maps
+CSM
+PCF
+VSM
+EVSM
+Moment Shadow Maps
+Contact Shadows
+Capsule Shadows
+Distance Field Shadows
+Ray-Traced Shadows
+Soft Shadows
+Penumbra Simulation
+
+SECTION 6 - PHYSICALLY BASED RENDERING
+======================================
+Metallic Workflow
+Specular Workflow
+Cook-Torrance BRDF
+GGX Distribution
+Fresnel-Schlick
+Energy Conservation
+Microfacet Models
+Importance Sampling
+
+Texture Inputs
+--------------
+Albedo
+Normal
+Roughness
+Metallic
+AO
+Height
+Displacement
+Opacity
+Emissive
+
+SECTION 7 - GLOBAL ILLUMINATION
+===============================
+Lightmaps
+Dynamic GI
+Voxel GI
+Radiance Cascades
+RTX GI
+Probe Grids
+Screen Space GI
+Sparse Voxel Octrees
+
+SECTION 8 - AMBIENT OCCLUSION
+=============================
+SSAO
+HBAO
+HBAO+
+GTAO
+SSDO
+Ray-Traced AO
+Horizon AO
+
+SECTION 9 - REFLECTIONS
+=======================
+SSR
+Stochastic SSR
+Temporal SSR
+Reflection Probes
+Parallax Corrected Cubemaps
+Planar Reflections
+Dynamic Cubemaps
+Ray-Traced Reflections
+Hybrid Reflections
+
+SECTION 10 - REFRACTION
+=======================
+Water Refraction
+Glass Refraction
+Heat Distortion
+Shockwave Distortion
+Atmospheric Refraction
+
+SECTION 11 - WATER
+==================
+Gerstner Waves
+FFT Oceans
+Caustics
+Foam Generation
+Shore Interaction
+Underwater Rendering
+Fresnel Reflection
+Water Absorption
+Water Scattering
+Rain Ripples
+
+SECTION 12 - ATMOSPHERICS
+=========================
+Rayleigh Scattering
+Mie Scattering
+Ozone Absorption
+Aerial Perspective
+Atmospheric Scattering
+Sky Models
+Dynamic Time of Day
+Sun and Moon Systems
+
+SECTION 13 - VOLUMETRICS
+========================
+Volumetric Fog
+Volumetric Clouds
+Volumetric Smoke
+Volumetric Fire
+Volumetric Lighting
+God Rays
+Light Shafts
+Dust Volumes
+
+SECTION 14 - TERRAIN
+====================
+Heightmaps
+Terrain Tessellation
+Terrain Blending
+Splat Mapping
+Virtual Textures
+Terrain AO
+Procedural Terrain
+
+SECTION 15 - VEGETATION
+=======================
+Grass Systems
+Tree Systems
+Wind Simulation
+Leaf Shading
+Subsurface Scattering
+Seasonal Variations
+Procedural Foliage
+
+SECTION 16 - CHARACTER RENDERING
+================================
+Skin Shading
+Subsurface Scattering
+Hair Rendering
+Anisotropic Hair
+Eye Rendering
+Corneal Reflections
+Cloth Shading
+
+SECTION 17 - POST PROCESSING
+============================
+HDR
+Bloom
+Lens Dirt
+Lens Flare
+Anamorphic Flares
+Depth of Field
+Motion Blur
+Film Grain
+Chromatic Aberration
+Vignette
+Color Grading
+LUT Processing
+Tone Mapping
+Eye Adaptation
+
+SECTION 18 - ANTI ALIASING
+==========================
+MSAA
+SSAA
+CSAA
+FXAA
+SMAA
+CMAA
+TAA
+TSR
+
+SECTION 19 - UPSCALING
+======================
+DLSS
+FSR
+XeSS
+Frame Generation
+Temporal Upscaling
+Spatial Upscaling
+
+SECTION 20 - PARTICLES
+======================
+GPU Particles
+CPU Particles
+Smoke
+Fire
+Dust
+Sparks
+Fluid Simulation
+Niagara Style Systems
+
+SECTION 21 - WORLD STREAMING
+============================
+Chunk Streaming
+World Partition
+Texture Streaming
+Geometry Streaming
+Async Loading
+Virtual Assets
+
+SECTION 22 - CULLING
+====================
+Frustum Culling
+Occlusion Culling
+Portal Culling
+Distance Culling
+Hierarchical Z Culling
+
+SECTION 23 - WEATHER
+====================
+Rain
+Snow
+Storms
+Cloud Systems
+Wind Systems
+Wet Surfaces
+Dynamic Puddles
+Accumulation Systems
+
+SECTION 24 - VEHICLE RENDERING
+==============================
+Headlight Projection
+Brake Lights
+Turn Signals
+Reflective Paint
+Metallic Paint
+Glass Rendering
+Wet Vehicle Shaders
+
+SECTION 25 - DEFERRED RENDERING
+===============================
+GBuffer Layouts
+Position Buffers
+Normal Buffers
+Material Buffers
+Lighting Passes
+Transparency Handling
+
+SECTION 26 - FORWARD RENDERING
+==============================
+Single Pass Lighting
+Multi-Pass Lighting
+Transparency Advantages
+
+SECTION 27 - CLUSTERED RENDERING
+================================
+Forward+
+Clustered Forward
+Tiled Deferred
+Light Indexing
+GPU Light Culling
+
+SECTION 28 - RAY TRACING
+========================
+DXR
+BVH Structures
+Ray Queries
+Reflection Rays
+Shadow Rays
+GI Rays
+
+SECTION 29 - PATH TRACING
+=========================
+Monte Carlo Integration
+Importance Sampling
+Denoisers
+Reservoir Sampling
+ReSTIR Techniques
+
+SECTION 30 - DIRECTX 9 INJECTORS
+================================
+DLL Injection
+API Hooking
+Device Hooks
+Present Hooks
+EndScene Hooks
+Shader Replacement
+State Tracking
+
+SECTION 31 - ENB / RESHADE CONCEPTS
+===================================
+Post Processing Chains
+Depth Buffer Access
+Shader Overrides
+Runtime Configuration
+Effect Layering
+
+SECTION 32 - PRISM3D CONSIDERATIONS
+===================================
+Dynamic Truck Lighting
+Road Reflections
+Weather Systems
+Large World Streaming
+Traffic Lighting
+Interior Lighting
+
+SECTION 33 - OPTIMIZATION
+=========================
+Batching
+Instancing
+LOD Systems
+HLOD
+Texture Compression
+Memory Pools
+Async Compute
+GPU Profiling
+
+SECTION 34 - MEMORY MANAGEMENT
+==============================
+Resource Lifetimes
+Streaming Buffers
+Texture Pools
+Geometry Pools
+Descriptor Management
+
+SECTION 35 - MODERN ENGINE FEATURES
+===================================
+Nanite-Like Geometry
+Virtual Shadow Maps
+Radiance Cascades
+Sparse Virtual Textures
+Procedural Worlds
+AI Assisted Rendering
+
+SECTION 36 - FUTURE RESEARCH
+============================
+Neural Rendering
+Neural Materials
+Neural GI
+Path Tracing Everywhere
+Real-Time Cinematic Lighting
+Full Scene Radiance Fields
+Hybrid Raster + Neural Pipelines
+
+ULTIMATE DX9 MODERNIZATION PACKAGE
+==================================
+PBR
+SSAO
+GTAO
+SSR
+SSGI
+Bloom
+HDR
+TAA
+Cloud Shadows
+Volumetric Fog
+Volumetric Clouds
+Contact Shadows
+Dynamic Wet Roads
+Dynamic Puddles
+Parallax Occlusion Mapping
+Atmospheric Scattering
+Vehicle Headlight Projection
+Dynamic Interior Lighting
+Probe-Based Reflections
+Advanced Tonemapping
+LUT Color Grading
+Weather-Based Lighting
+Day/Night Cycles

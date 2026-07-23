@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "nfsmw-toolkit",
+  "version": "0.1.0",
+  "description": "Need for Speed: Most Wanted (2005) Texture (TPK/BUN) and VLT/Vault Editor",
+  "dependencies": [
+    {
+      "name": "glfw3",
+      "platform": "!android"
+    },
+    "glm",
+    {
+      "name": "imgui",
+      "features": ["docking-experimental", "glfw-binding", "opengl3-binding"],
+      "platform": "!android"
+    },
+    {
+      "name": "glad",
+      "platform": "!android"
+    },
+    "nlohmann-json",
+    "spdlog",
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": ["avcodec", "avformat", "swscale", "swresample"],
+      "platform": "!android"
+    }
+  ]
+}

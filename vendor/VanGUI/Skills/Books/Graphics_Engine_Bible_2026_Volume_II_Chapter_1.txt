@@ -1,0 +1,134 @@
+
+Graphics Engine Bible 2026
+Volume II — Rendering Systems & Physically Based Rendering
+
+Chapter 1: Modern Rendering Architecture
+
+1.1 Introduction
+
+Every modern graphics engine exists to solve a deceptively simple problem:
+Convert a virtual world into pixels on a display.
+
+A modern renderer is composed of multiple subsystems:
+- Scene management
+- Visibility determination
+- Material evaluation
+- Lighting
+- Shadow generation
+- Post-processing
+- Temporal reconstruction
+- GPU scheduling
+
+1.2 Frame Lifecycle
+
+Typical frame sequence:
+
+Input
+Simulation
+Visibility Determination
+Render Graph Construction
+Shadow Passes
+Geometry Passes
+Lighting Passes
+Post Processing
+Presentation
+
+1.3 CPU and GPU Responsibilities
+
+CPU:
+- Game logic
+- Resource streaming
+- Scene graph updates
+- Command generation
+
+GPU:
+- Rasterization
+- Shading
+- Compute workloads
+- Ray tracing
+
+1.4 Render Graph Systems
+
+Modern engines increasingly use render graphs.
+
+Benefits:
+- Automatic resource lifetime tracking
+- Barrier generation
+- Pass scheduling
+- Memory aliasing
+
+Example Pass Chain:
+
+Depth Prepass
+↓
+GBuffer
+↓
+SSAO
+↓
+Lighting
+↓
+SSR
+↓
+Bloom
+↓
+Tone Mapping
+↓
+TAA
+↓
+Present
+
+1.5 Deferred Rendering Fundamentals
+
+Deferred rendering separates geometry processing from lighting.
+
+Typical G-buffer:
+
+RT0: Albedo
+RT1: Normal
+RT2: Material Properties
+Depth Buffer
+Velocity Buffer
+
+Advantages:
+- Efficient handling of many lights
+- Material flexibility
+
+Disadvantages:
+- Memory bandwidth costs
+- Transparency challenges
+
+1.6 Forward+ Rendering
+
+Forward+ combines forward rendering quality with tiled light culling.
+
+Workflow:
+1. Divide screen into tiles
+2. Build light lists
+3. Shade only relevant lights
+
+Advantages:
+- Better transparency support
+- Lower memory requirements
+
+1.7 Clustered Rendering
+
+Clustered rendering extends tiled rendering into 3D space.
+
+Benefits:
+- Better scalability
+- Improved volumetric integration
+- Reduced light list sizes
+
+1.8 Engine Architecture Principles
+
+Core goals:
+
+Scalability
+Maintainability
+Performance
+Debuggability
+Portability
+
+Large engines should be designed around modular systems rather than monolithic pipelines.
+
+End of Chapter 1.

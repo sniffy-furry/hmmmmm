@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\backends\vangui_impl_sdlgpu3.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\backends\vangui_impl_sdl3.cpp">
+      <Filter>sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\vangui.cpp">
+      <Filter>vangui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\vangui_demo.cpp">
+      <Filter>vangui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\vangui_draw.cpp">
+      <Filter>vangui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\vangui_tables.cpp">
+      <Filter>vangui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\vangui_widgets.cpp">
+      <Filter>vangui</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\backends\vangui_impl_sdlgpu3.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\backends\vangui_impl_sdlgpu3_shaders.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\backends\vangui_impl_sdl3.h">
+      <Filter>sources</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\vanconfig.h">
+      <Filter>vangui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\vangui.h">
+      <Filter>vangui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\vangui_internal.h">
+      <Filter>vangui</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="vangui">
+      <UniqueIdentifier>{9044ef92-2afa-42f2-92df-ac473c7c32b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sources">
+      <UniqueIdentifier>{ef84458b-039a-4902-8455-4e33df5a8578}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

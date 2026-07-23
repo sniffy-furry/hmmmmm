@@ -1,0 +1,18 @@
+# self-test: mix of formats. These are ALREADY-KNOWN names + a few real field guesses.
+# plain names (known-resolvable)
+CatchUp
+TopSpeedMultiplier
+AccelerationMultiplier
+# UPPER physics convention
+MASS
+TORQUE
+STIFFNESS
+# hash=name form (VltEd style) - correct hash
+0xEC57E16B = TopSpeedMultiplier
+# hash=name form with a DELIBERATELY WRONG hash (should warn)
+0xDEADBEEF = TotallyFakeField
+# snake and camel variants of a known one
+shift_speed
+num_laps
+# CSV row
+SkillLevel,Int32,50

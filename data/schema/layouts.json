@@ -1,0 +1,124 @@
+{
+  "$comment": "Declarative on-disk struct layouts for MWTools (roadmap F1). Mirrors reference/MWEncyclopedia/Appendices/struct-reference.md in machine-readable form. Every field is tagged status: verified | inferred. Tools and the round-trip harness consume this so 'fill in the offsets' is a DATA edit validated by tests, never a silent code change. All offsets are bytes from the struct start; little-endian unless endian:'be'.",
+  "version": 1,
+  "structs": {
+    "ChunkHeader": {
+      "size": 8, "status": "verified",
+      "fields": [
+        { "name": "id",   "off": 0, "type": "u32", "note": "container if (id & 0x80000000)" },
+        { "name": "size", "off": 4, "type": "u32", "note": "payload bytes, excludes header" }
+      ]
+    },
+    "JDLZHeader": {
+      "size": 16, "status": "verified",
+      "fields": [
+        { "name": "magic",            "off": 0,  "type": "char[4]", "value": "JDLZ" },
+        { "name": "version",          "off": 4,  "type": "u8",  "value": 2 },
+        { "name": "headerSize",       "off": 5,  "type": "u8",  "value": 16 },
+        { "name": "reserved",         "off": 6,  "type": "u16" },
+        { "name": "decompressedSize", "off": 8,  "type": "u32" },
+        { "name": "compressedSize",   "off": 12, "type": "u32" }
+      ]
+    },
+    "TPKInfoHeader": {
+      "chunk": "0x33310001", "status": "verified",
+      "fields": [
+        { "name": "version",  "off": 0,  "type": "u32" },
+        { "name": "packName", "off": 4,  "type": "char[28]" },
+        { "name": "path",     "off": 32, "type": "char[64]" },
+        { "name": "hash",     "off": 96, "type": "u32" }
+      ]
+    },
+    "TPKEntry": {
+      "chunk": "0x33310004", "size": 124, "status": "verified",
+      "fields": [
+        { "name": "name",       "off": 12, "type": "char[24]" },
+        { "name": "nameHash",   "off": 36, "type": "u32", "hash": "joaat" },
+        { "name": "classHash",  "off": 40, "type": "u32" },
+        { "name": "dataOffset", "off": 48, "type": "u32", "note": "into 0x33320002" },
+        { "name": "paletteOffset", "off": 52, "type": "u32" },
+        { "name": "dataSize",   "off": 56, "type": "u32" },
+        { "name": "width",      "off": 68, "type": "u16" },
+        { "name": "height",     "off": 70, "type": "u16" },
+        { "name": "log2w",      "off": 72, "type": "u8" },
+        { "name": "log2h",      "off": 73, "type": "u8" },
+        { "name": "comprType",  "off": 74, "type": "u8", "note": "0x24 = DXT3" },
+        { "name": "mipmapCount","off": 78, "type": "u8" }
+      ]
+    },
+    "TPKCompDesc": {
+      "chunk": "0x33310003", "size": 24, "status": "verified",
+      "fields": [
+        { "name": "nameHash",       "off": 0,  "type": "u32" },
+        { "name": "absFileOffset",  "off": 4,  "type": "u32", "note": "ABSOLUTE file offset" },
+        { "name": "jdlzCompSize",   "off": 8,  "type": "u32" },
+        { "name": "jdlzDecompSize", "off": 12, "type": "u32" },
+        { "name": "flags",          "off": 16, "type": "u32" },
+        { "name": "padding",        "off": 20, "type": "u32" }
+      ]
+    },
+    "SolidObjectHeader": {
+      "chunk": "0x00134011", "size": 160, "status": "verified",
+      "note": "preceded by 0x11 alignment padding; name is a C string at +160",
+      "fields": [
+        { "name": "version",   "off": 12, "type": "u32", "value": 22 },
+        { "name": "nameHash",  "off": 16, "type": "u32", "hash": "joaat" },
+        { "name": "numTris",   "off": 20, "type": "u32" },
+        { "name": "flags",     "off": 24, "type": "u32" },
+        { "name": "bboxMin",   "off": 32, "type": "f32[4]" },
+        { "name": "bboxMax",   "off": 48, "type": "f32[4]" },
+        { "name": "transform", "off": 64, "type": "f32[16]", "note": "row-major; read straight, no transpose" }
+      ]
+    },
+    "ShadingGroup": {
+      "chunk": "0x00134B02", "size": 104, "status": "verified",
+      "fields": [
+        { "name": "bboxMin",     "off": 0,  "type": "f32[3]" },
+        { "name": "bboxMax",     "off": 12, "type": "f32[3]" },
+        { "name": "texIdx",      "off": 24, "type": "u8[5]" },
+        { "name": "shaderIdx",   "off": 29, "type": "u8" },
+        { "name": "texCount",    "off": 48, "type": "u32" },
+        { "name": "fvfFlags",    "off": 56, "type": "u32", "note": "0x4000=36B stride, 0x2A4000/0x224000=60B" },
+        { "name": "vertexCount", "off": 60, "type": "u32" },
+        { "name": "triCount",    "off": 64, "type": "u32" },
+        { "name": "firstIndex",  "off": 68, "type": "u32" },
+        { "name": "indexCount",  "off": 92, "type": "u32" }
+      ]
+    },
+    "SNREntry": {
+      "size": 32, "status": "verified",
+      "fields": [
+        { "name": "id",            "off": 0,  "type": "u32" },
+        { "name": "nameOffset",    "off": 4,  "type": "u32" },
+        { "name": "sptOffset",     "off": 8,  "type": "u32" },
+        { "name": "sptSize",       "off": 12, "type": "u32" },
+        { "name": "sampleRate",    "off": 16, "type": "u32" },
+        { "name": "channels",      "off": 20, "type": "u16" },
+        { "name": "bitsPerSample", "off": 22, "type": "u16" },
+        { "name": "codecTag",      "off": 24, "type": "u32" },
+        { "name": "durationMs",    "off": 28, "type": "u32" }
+      ]
+    },
+    "VPAKHeader": {
+      "magic": "VPAK", "headerSize": 64, "status": "verified",
+      "note": "tagged blocks at +0x80: {char tag[4]; u32 size; payload}. ErtS=strings, NpeD=deps, NrtS=symbols, NtaD=records. NtaD record marker = 0xEFFECADD."
+    },
+    "WorldRecords": {
+      "status": "verified-boundaries",
+      "note": "record STRIDES are verified; per-record field maps are not yet fully confirmed (structural-locate only, like NtaD).",
+      "strides": {
+        "StreamingSections": { "chunk": "0x00034110", "stride": 92 },
+        "SceneryInfo":       { "chunk": "0x00034102", "stride": 72 },
+        "SceneryInstance":   { "chunk": "0x00034103", "stride": 64 }
+      }
+    },
+    "MiniMapTile": {
+      "status": "verified",
+      "note": "outer chunk 0x0003A100 (flat envelope) -> JDLZ -> one-texture TPK: MINI_MAP_CHOPn, 128x128 DXT3, 16384 bytes, 0 mips"
+    },
+    "CarInfo": {
+      "status": "inferred",
+      "note": "STUB — per-car CARINFO.BIN offsets unconfirmed; real car tuning lives in the VPAK vault (NtaD). Do not write through these until confirmed by round-trip (roadmap V2/V5)."
+    }
+  }
+}

@@ -1,0 +1,388 @@
+
+Graphics Engine Bible 2026
+Volume II — Rendering Systems & Physically Based Rendering
+
+Chapter 2: Deferred Rendering Architecture
+
+=====================================================================
+2.1 Introduction
+=====================================================================
+
+Deferred rendering is one of the most influential rendering techniques
+in modern real-time graphics. Rather than calculating lighting while
+drawing geometry, deferred rendering separates geometry processing from
+lighting evaluation.
+
+The central idea is simple:
+
+    Geometry Pass -> G-Buffer -> Lighting Pass -> Post Processing
+
+This decoupling allows thousands of dynamic lights to be processed
+without repeatedly rendering scene geometry.
+
+Deferred rendering became popular because traditional forward rendering
+scales poorly when large numbers of lights are visible simultaneously.
+
+=====================================================================
+2.2 Historical Context
+=====================================================================
+
+Early engines relied almost entirely on forward rendering.
+
+For every object:
+
+    For every affecting light:
+        Render object
+
+This creates a complexity roughly proportional to:
+
+    Objects × Lights
+
+As scene complexity increased, lighting costs became prohibitive.
+
+Deferred rendering changed the relationship by storing surface data
+once and performing lighting calculations later in screen space.
+
+This shifted cost toward:
+
+    Visible Pixels × Lights
+
+which is often significantly more efficient.
+
+=====================================================================
+2.3 Core Pipeline
+=====================================================================
+
+A typical deferred renderer consists of:
+
+1. Depth Prepass
+2. Geometry Pass
+3. Lighting Pass
+4. Transparency Pass
+5. Post Processing
+6. Presentation
+
+Pipeline overview:
+
+Scene Geometry
+      |
+      V
++----------------+
+| Depth Prepass  |
++----------------+
+      |
+      V
++----------------+
+| G-Buffer Pass  |
++----------------+
+      |
+      V
++----------------+
+| Lighting Pass  |
++----------------+
+      |
+      V
++----------------+
+| Post FX        |
++----------------+
+      |
+      V
++----------------+
+| Present        |
++----------------+
+
+=====================================================================
+2.4 Depth Prepass
+=====================================================================
+
+Many engines perform a depth-only pass before populating the G-buffer.
+
+Benefits:
+
+- Early Z rejection
+- Reduced overdraw
+- Better cache behavior
+- More stable performance
+
+Only depth values are written.
+
+No lighting calculations occur.
+
+=====================================================================
+2.5 G-Buffer Fundamentals
+=====================================================================
+
+The G-buffer stores material and geometric information required for
+later lighting evaluation.
+
+Common layout:
+
+RT0:
+    Albedo.rgb
+    Ambient Occlusion
+
+RT1:
+    Normal.xyz
+    Roughness
+
+RT2:
+    Metallic
+    Specular
+    Material Flags
+
+RT3:
+    Emissive
+    Custom Data
+
+Depth Buffer:
+    Linear or hardware depth
+
+Velocity Buffer:
+    Motion vectors
+
+The exact layout varies between engines.
+
+=====================================================================
+2.6 Memory Considerations
+=====================================================================
+
+Deferred rendering is memory intensive.
+
+Example:
+
+1920 x 1080 resolution
+
+4 Render Targets
+32 bits per channel
+
+Memory consumption can easily exceed hundreds of megabytes per frame.
+
+Strategies:
+
+- G-buffer packing
+- Reduced precision formats
+- MRT optimization
+- Bandwidth reduction
+
+Common formats:
+
+RGBA8
+RGBA16F
+R11G11B10F
+RG16F
+
+=====================================================================
+2.7 Normal Encoding
+=====================================================================
+
+Storing normals efficiently is critical.
+
+Options include:
+
+- Full XYZ storage
+- Octahedral encoding
+- Spherical mapping
+- Two-component reconstruction
+
+Octahedral encoding is widely adopted because it provides excellent
+quality while minimizing memory requirements.
+
+Benefits:
+
+- Reduced bandwidth
+- Better cache efficiency
+- Smaller G-buffer footprint
+
+=====================================================================
+2.8 Lighting Pass
+=====================================================================
+
+The lighting pass reads G-buffer data and reconstructs surface
+properties.
+
+Required inputs:
+
+- Position
+- Normal
+- Material data
+- Light parameters
+
+Per-pixel lighting becomes:
+
+Read G-buffer
+Reconstruct position
+Evaluate BRDF
+Accumulate light contribution
+
+Because geometry is no longer rendered, lighting cost becomes largely
+independent of scene complexity.
+
+=====================================================================
+2.9 Light Volumes
+=====================================================================
+
+Older deferred renderers frequently used light volumes.
+
+Examples:
+
+- Sphere lights
+- Cone lights
+- Capsule lights
+
+Workflow:
+
+1. Render volume geometry
+2. Restrict lighting calculations
+3. Accumulate contributions
+
+Advantages:
+
+- Reduced pixel processing
+- Better scalability
+
+Disadvantages:
+
+- Additional draw calls
+- Volume management complexity
+
+=====================================================================
+2.10 Tiled Deferred Rendering
+=====================================================================
+
+Modern engines often divide the screen into tiles.
+
+Typical tile size:
+
+16x16 pixels
+
+Workflow:
+
+1. Build light lists
+2. Assign lights to tiles
+3. Process only relevant lights
+
+Advantages:
+
+- Massive scalability
+- Reduced overdraw
+- Better GPU utilization
+
+=====================================================================
+2.11 Clustered Deferred Rendering
+=====================================================================
+
+Clustered rendering extends tiled rendering into depth space.
+
+Instead of:
+
+Tile(X,Y)
+
+We create:
+
+Cluster(X,Y,Z)
+
+Benefits:
+
+- Improved depth precision
+- Better volumetric integration
+- Smaller light lists
+
+Many modern engines favor clustered approaches.
+
+=====================================================================
+2.12 Transparency Challenges
+=====================================================================
+
+Deferred rendering struggles with transparency.
+
+Reasons:
+
+- G-buffer stores only one surface
+- Multiple layers cannot easily coexist
+
+Common solutions:
+
+- Forward transparency pass
+- Weighted blended OIT
+- Hybrid rendering
+
+Most production engines use a hybrid architecture.
+
+=====================================================================
+2.13 Shadows Integration
+=====================================================================
+
+Shadow maps integrate naturally into deferred pipelines.
+
+Lighting stage:
+
+Sample shadow map
+Evaluate visibility
+Apply attenuation
+
+Supported techniques:
+
+- PCF
+- VSM
+- EVSM
+- MSM
+- Ray-traced shadows
+
+=====================================================================
+2.14 Screen Space Effects
+=====================================================================
+
+Deferred rendering provides data useful for screen-space techniques.
+
+Examples:
+
+SSAO
+HBAO
+GTAO
+SSR
+SSGI
+
+These effects rely heavily on:
+
+- Depth
+- Normals
+- Motion vectors
+
+all readily available from the G-buffer.
+
+=====================================================================
+2.15 Performance Analysis
+=====================================================================
+
+Advantages:
+
+- Excellent many-light performance
+- Efficient BRDF evaluation
+- Flexible material systems
+- Rich post-processing support
+
+Disadvantages:
+
+- High bandwidth usage
+- Large memory footprint
+- Transparency complications
+- MSAA challenges
+
+=====================================================================
+2.16 Production Recommendations
+=====================================================================
+
+For modern engines:
+
+Use clustered lighting.
+Minimize G-buffer size.
+Compress normals.
+Use temporal reconstruction.
+Profile memory bandwidth continuously.
+Separate transparency into forward passes.
+
+Deferred rendering remains one of the most practical and scalable
+architectures for real-time graphics, forming the foundation of many
+AAA rendering pipelines.
+
+End of Chapter 2.
