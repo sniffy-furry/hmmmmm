@@ -40,26 +40,14 @@ jobs:
         echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
         echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
-    - name: Cache vcpkg
-      uses: actions/cache@v3
-      with:
-        path: /home/runner/work/vcpkg
-        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
-        restore-keys: |
-          ${{ runner.os }}-vcpkg-
-
-    - name: Install vcpkg and dependencies
+    # Replaces the old vcpkg steps: glm/spdlog/nlohmann-json are header-only,
+    # so plain apt packages are enough. CMakeLists.txt now passes
+    # NO_CMAKE_FIND_ROOT_PATH on their find_path() calls, so CMake will see
+    # these even while cross-compiling for Android via the NDK toolchain.
+    - name: Install C++ header dependencies (glm, spdlog, nlohmann-json)
       run: |
-        git clone https://github.com/Microsoft/vcpkg.git
-        cd vcpkg
-        ./bootstrap-vcpkg.sh
-        echo "VCPKG_ROOT=$PWD" >> $GITHUB_ENV
-        echo "$PWD" >> $GITHUB_PATH
-        # Set triplet for Android
-        export VCPKG_DEFAULT_TRIPLET=arm64-android
-        echo "VCPKG_DEFAULT_TRIPLET=arm64-android" >> $GITHUB_ENV
-        # Install dependencies from manifest
-        ./vcpkg install
+        sudo apt-get update
+        sudo apt-get install -y libglm-dev libspdlog-dev nlohmann-json3-dev
 
     - name: Install CMake 3.25.1
       run: |
@@ -71,8 +59,6 @@ jobs:
       env:
         ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         ANDROID_NDK: /usr/local/lib/android/sdk/ndk/26.1.10909125
-        VCPKG_ROOT: /home/runner/work/vcpkg
-        VCPKG_DEFAULT_TRIPLET: arm64-android
       run: |
         chmod +x gradlew
         ./gradlew assembleDebug

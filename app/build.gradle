@@ -7,6 +7,11 @@ android {
     namespace "com.teamvanilla.mwtools"
     compileSdk 35
 
+    // Pinned to match the exact NDK the workflow installs (ndk;26.1.10909125)
+    // so AGP doesn't also try to auto-provision its own default NDK version
+    // on top of the one already installed.
+    ndkVersion "26.1.10909125"
+
     defaultConfig {
         applicationId "com.teamvanilla.mwtools"
         minSdk 26

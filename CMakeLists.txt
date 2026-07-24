@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
 project(NFSMWToolkit CXX)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -26,8 +25,15 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # --- Find dependencies (installed via apt-get on CI) ------------------------
+# NOTE: NO_CMAKE_FIND_ROOT_PATH added below. When cross-compiling for Android
+# via the NDK toolchain file, CMake restricts find_path()/find_package() to
+# the NDK's own sysroot by default (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY),
+# which hides /usr/include - so apt-get installing these never helped. These
+# three are header-only (no compiled/arch-specific code), so it's safe to
+# tell CMake to also look at the host's normal system paths for them.
+
 # GLM - header-only
-find_path(GLM_INCLUDE_DIR NAMES glm/glm.hpp PATHS /usr/include /usr/local/include)
+find_path(GLM_INCLUDE_DIR NAMES glm/glm.hpp PATHS /usr/include /usr/local/include NO_CMAKE_FIND_ROOT_PATH)
 if(NOT GLM_INCLUDE_DIR)
     message(FATAL_ERROR "glm not found (install libglm-dev)")
 endif()
@@ -35,7 +41,7 @@ add_library(glm::glm INTERFACE IMPORTED)
 set_target_properties(glm::glm PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${GLM_INCLUDE_DIR}")
 
 # SPDLog - header-only library
-find_path(SPDLOG_INCLUDE_DIR NAMES spdlog/spdlog.h PATHS /usr/include /usr/local/include)
+find_path(SPDLOG_INCLUDE_DIR NAMES spdlog/spdlog.h PATHS /usr/include /usr/local/include NO_CMAKE_FIND_ROOT_PATH)
 if(NOT SPDLOG_INCLUDE_DIR)
     message(FATAL_ERROR "spdlog not found (install libspdlog-dev)")
 endif()
@@ -43,7 +49,7 @@ add_library(spdlog::spdlog INTERFACE IMPORTED)
 set_target_properties(spdlog::spdlog PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${SPDLOG_INCLUDE_DIR}")
 
 # nlohmann-json - header-only
-find_path(NLOHMANN_INCLUDE_DIR NAMES nlohmann/json.hpp PATHS /usr/include /usr/local/include)
+find_path(NLOHMANN_INCLUDE_DIR NAMES nlohmann/json.hpp PATHS /usr/include /usr/local/include NO_CMAKE_FIND_ROOT_PATH)
 if(NOT NLOHMANN_INCLUDE_DIR)
     message(FATAL_ERROR "nlohmann-json not found (install nlohmann-json3-dev)")
 endif()
@@ -99,7 +105,6 @@ add_library(nfsmw_core STATIC
     ${FORMAT_SOURCES}
     ${PATCH_SOURCES}
 )
-
 target_include_directories(nfsmw_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(nfsmw_core PUBLIC
     glm::glm
