@@ -106,6 +106,11 @@ add_library(nfsmw_core STATIC
     ${PATCH_SOURCES}
 )
 target_include_directories(nfsmw_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(nfsmw_core SYSTEM PUBLIC
+    ${GLM_INCLUDE_DIR}
+    ${SPDLOG_INCLUDE_DIR}
+    ${NLOHMANN_INCLUDE_DIR}
+)
 target_link_libraries(nfsmw_core PUBLIC
     glm::glm
     spdlog::spdlog
